@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Technician Team — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "cs"]);
+renderShell({
+  active: "users", role: session.role, session,
+  pageTitle: "Technician Team", pageSubtitle: "Assign each technician to Team 1 or Team 2. Only HOD/Admin or CS can change this.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="card">
+    <h2>Technicians</h2>
+    <p class="small">Team decides which schedule a technician sees when they log in. Changing this here
+    takes effect immediately — enforced by the server, not just this page.</p>
+    <div id="techList"></div>
+  </div>
+`;
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #techList with the real list exactly as
+// before.
+document.getElementById("techList").innerHTML = skeletonRows(2);
+
+async function render() {
+  let data;
+  try {
+    data = await api("/api/accounts");
+  } catch (e) {
+    document.getElementById("techList").innerHTML =
+      `<div class="empty">Couldn't load technicians — ${e.message || "retrying…"}</div>`;
+    setTimeout(render, 4000);
+    return;
+  }
+  const accounts = data.accounts || data;
+  const technicians = accounts.filter(a => a.role === "technician");
+
+  const listEl = document.getElementById("techList");
+  listEl.innerHTML = technicians.map(t => `
+    <div class="attention-item">
+      <div>
+        <div class="t-title">${t.name}</div>
+        <div class="t-meta">Current team: ${t.team || "Not assigned"}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <select id="team-${t.id}" style="width:auto;margin:0;">
+          <option value="Team 1"${t.team === "Team 1" ? " selected" : ""}>Team 1</option>
+          <option value="Team 2"${t.team === "Team 2" ? " selected" : ""}>Team 2</option>
+        </select>
+        <button class="secondary" style="margin:0;" onclick="saveTeam('${t.id}', '${t.name.replace(/'/g, "\\'")}')">Save</button>
+      </div>
+    </div>
+  `).join("") || emptyState("No technician accounts found.", "users");
+}
+
+async function saveTeam(accountId, name) {
+  const select = document.getElementById(`team-${accountId}`);
+  const team = select.value;
+  try {
+    await api("/api/technicians/set_team", "POST", { actor: session.name, name, team });
+    await render();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+render();
+</script>
+</body>
+</html>

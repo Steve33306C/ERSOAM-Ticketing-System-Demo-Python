@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard — Customer Service — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("cs");
+renderShell({
+  active: "dashboard", role: "cs", session,
+  pageTitle: "Dashboard", pageSubtitle: "What needs your attention as customer service, right now.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="stat-grid dashboard-sticky-stats">
+    <div class="stat-card" style="border-color:#b91c1c;cursor:pointer;" onclick="scrollToSection('section-reschedule')"><div class="stat-icon">${icon("warning")}</div><div><div class="stat-num" id="stat-reschedule" style="color:#b91c1c;">—</div><div class="stat-label" style="color:#b91c1c;">NEED TO RESCHEDULE</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-needeng')"><div class="stat-icon">${icon("wrench")}</div><div><div class="stat-num" id="stat-needeng">—</div><div class="stat-label">NEEDS ENGINEER ASSIGNMENT</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-ready')"><div class="stat-icon">${icon("check")}</div><div><div class="stat-num" id="stat-ready">—</div><div class="stat-label">READY TO CLOSE</div></div></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-reschedule" style="border:1.5px solid #b91c1c;background:#fef2f2;">
+    <h2 style="color:#b91c1c;">${icon("warning")} Need to Reschedule</h2>
+    <p class="small">Technician can't proceed as scheduled — arrange a new date, then mark it done.</p>
+    <div id="rescheduleList"></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-needeng">
+    <h2>Needs engineer assignment</h2>
+    <p class="small">Tickets you're on that haven't been scheduled yet.</p>
+    <div id="needList"></div>
+  </div>
+  <div class="card dashboard-section" id="section-ready">
+    <h2>Ready to close</h2>
+    <p class="small">Report approved — confirm with the client, then close.</p>
+    <div id="readyList"></div>
+  </div>
+`;
+
+// Skeleton placeholders while the first render() is still waiting on the
+// API — render() below overwrites these same containers with real content
+// exactly as before.
+["rescheduleList", "needList", "readyList"].forEach(id => {
+  document.getElementById(id).innerHTML = skeletonRows(2);
+});
+
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function ticketRow(t, note, sla) {
+  return `<div class="attention-item" style="cursor:pointer;" onclick="location.href='ticket-detail.html?id=${t.id}'">
+    <div>
+      <div class="t-title">${t.id} — ${t.title}</div>
+      <div class="t-meta">${t.client} · ${TYPE_LABELS[t.type] || t.type}</div>
+    </div>
+    <div style="text-align:right;">
+      <span class="badge badge-progress">${STATE_LABELS[t.state] || t.state}</span>
+      ${sla ? `<div class="t-meta" style="color:${sla.color};font-weight:700;">${sla.label}</div>` : ""}
+      ${note ? `<div class="t-meta">${note}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function rescheduleRow(t) {
+  return `<div class="attention-item">
+    <div style="cursor:pointer;" onclick="location.href='ticket-detail.html?id=${t.id}'">
+      <div class="t-title">${t.id} — ${t.title}</div>
+      <div class="t-meta">${t.client} · ${TYPE_LABELS[t.type] || t.type}</div>
+      <div class="t-meta" style="color:#b91c1c;margin-top:4px;">Reason: ${t.reschedule_reason || "—"}</div>
+    </div>
+    <div style="text-align:right;">
+      <button class="mobile-btn" style="padding:6px 14px;font-size:12.5px;" onclick="doClearReschedule('${t.id}')">Mark as Rescheduled</button>
+    </div>
+  </div>`;
+}
+
+function doClearReschedule(ticketId) {
+  doAction(ticketId, "clear_reschedule", { actor: session.name }, () => render(), (msg) => showToast(msg));
+}
+
+async function render() {
+  // Fasa 8 audit (5 Okt) — same "stuck Loading…" bug class as B3
+  // (checklist.html): no try/catch around the initial API call, so a
+  // failed first load left the skeleton rows showing forever with no
+  // explanation, only self-healing on the next successful poll (4s later).
+  let tickets;
+  try {
+    tickets = (await api("/api/tickets")).tickets;
+  } catch (e) {
+    const msg = `<div class="empty">Couldn't load — ${e.message || "retrying…"}</div>`;
+    ["rescheduleList", "needList", "readyList"].forEach(id => { document.getElementById(id).innerHTML = msg; });
+    return;
+  }
+  const mine = tickets.filter(t => t.assignees.includes(session.name));
+  const needsReschedule = mine.filter(t => t.reschedule_requested);
+  const needEng = mine.filter(t => t.state === "created");
+  const ready = mine.filter(t => t.state === "approved");
+
+  document.getElementById("stat-reschedule").textContent = needsReschedule.length;
+  document.getElementById("stat-needeng").textContent = needEng.length;
+  document.getElementById("stat-ready").textContent = ready.length;
+
+  document.getElementById("rescheduleList").innerHTML = needsReschedule.length
+    ? needsReschedule.map(t => rescheduleRow(t)).join("") : emptyState("Nothing needs rescheduling right now.", "reschedule");
+  document.getElementById("needList").innerHTML = needEng.length
+    ? needEng.map(t => ticketRow(t)).join("") : emptyState("Nothing waiting on an engineer assignment.", "user");
+    document.getElementById("readyList").innerHTML = ready.length
+    ? ready.map(t => ticketRow(t, (t.report.installation_improvement && t.report.installation_improvement.engineer_comments) || "", slaInfo(t.report.approved_at, 2))).join("") : emptyState("Nothing ready to close right now.", "check");
+}
+render();
+setInterval(render, 4000);
+</script>
+</body>
+</html>

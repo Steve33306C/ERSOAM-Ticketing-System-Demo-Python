@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Analytics — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin"]);
+renderShell({
+  active: "analytics", role: session.role, session,
+  pageTitle: "Analytics & Reporting",
+  pageSubtitle: "Workload and quality signals to support allocation decisions — not a ranked score.",
+});
+
+// Period selector. Every card below counts "the last N days" (inclusive of today minus N),
+// so "This month" and "This year" are just a different N: days since the 1st of the month /
+// since 1 January. Dates use todayYmd() (Malaysia time) like the rest of the app.
+const PERIOD_OPTIONS = [
+  { key: "30d", label: "Last 30 days" },
+  { key: "month", label: "This month" },
+  { key: "90d", label: "Last 3 months" },
+  { key: "year", label: "This year" },
+];
+function periodDaysFor(key) {
+  const [y, m, d] = todayYmd().split("-").map(Number);
+  if (key === "month") return d - 1;
+  if (key === "year") return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(y, 0, 1)) / 86400000);
+  return key === "90d" ? 90 : 30;
+}
+let periodKey = "30d";
+try { const saved = localStorage.getItem("om_analytics_period"); if (PERIOD_OPTIONS.some(o => o.key === saved)) periodKey = saved; } catch (e) {}
+let PERIOD_DAYS = periodDaysFor(periodKey);
+function periodLabel() { return (PERIOD_OPTIONS.find(o => o.key === periodKey) || PERIOD_OPTIONS[0]).label.toLowerCase(); } // "last 30 days"
+function periodShort() { return periodKey === "30d" ? "30d" : periodKey === "90d" ? "3m" : periodKey === "month" ? "month" : "year"; }
+function setPeriod(key) {
+  periodKey = key; PERIOD_DAYS = periodDaysFor(key);
+  try { localStorage.setItem("om_analytics_period", key); } catch (e) {}
+  render();
+}
+let allTickets = [], allClients = [], allAccounts = [];
+let expandedGaps = {}; // accountName -> "tickets" | "clients" | null
+let recordExpand = {}; // "t-<id>" | "c-<id>" -> bool, per-record segmented detail
+
+// Skeleton shape while the first render() is still waiting on the API —
+// render() below overwrites #root entirely with the real dashboard exactly
+// as before, this is only the initial placeholder.
+document.getElementById("pageContent").innerHTML = `<div id="root">${skeletonCards(3)}</div>`;
+
+function fmtPct(p) { return p === null ? "—" : `${Math.round(p)}%`; }
+function byTypeHtml(byType) {
+  const entries = Object.entries(byType);
+  if (!entries.length) return `<span class="small">None</span>`;
+  return entries.map(([k, v]) => `<span class="badge badge-type" style="margin:0 4px 4px 0;">${TYPE_LABELS[k] || k}: ${v}</span>`).join("");
+}
+
+function departmentCard() {
+  const dept = departmentSummary(allTickets, PERIOD_DAYS);
+  const typeSegments = Object.entries(dept.createdByType).map(([k, v], i) => ({ label: TYPE_LABELS[k] || k, value: v, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+  const cvcSegments = [
+    { label: "Created", value: dept.createdInPeriodCount, color: "#2563eb" },
+    { label: "Closed", value: dept.closedInPeriodCount, color: "#16a34a" },
+  ];
+  const clientTop = clientActivitySummary(allClients, allTickets, PERIOD_DAYS)[0];
+  return `
+    <div class="card">
+      <div class="detail-header">
+        <h2 style="margin:0;">Department Overview — ${periodLabel()}</h2>
+        <a class="chip-link" onclick="openDeptDetail()">View Details &rarr;</a>
+      </div>
+      <div class="chart-row" style="margin-top:12px;">
+        <div class="chart-col">
+          <div class="chart-title">Tickets opened, by type</div>
+          <div class="chart-donut-wrap">
+            ${svgDonutChart(typeSegments, { centerLabel: dept.createdInPeriodCount, centerSubLabel: "opened" })}
+            ${chartLegend(typeSegments)}
+          </div>
+        </div>
+        <div class="chart-col">
+          <div class="chart-title">Created vs. Closed</div>
+          <div class="chart-donut-wrap">
+            ${svgDonutChart(cvcSegments, { centerLabel: dept.createdInPeriodCount + dept.closedInPeriodCount, centerSubLabel: "total" })}
+            ${chartLegend(cvcSegments)}
+          </div>
+          <p class="small">${Math.abs(dept.createdInPeriodCount - dept.closedInPeriodCount) <= 1 ? "Roughly balanced" : dept.createdInPeriodCount > dept.closedInPeriodCount ? "Backlog growing" : "Backlog shrinking"}</p>
+        </div>
+      </div>
+      <div class="callout-row">
+        <div class="callout-box">
+          <div class="callout-box-label">Avg Ticket Lifetime</div>
+          <div class="callout-box-value">${fmtHours(dept.avgLifetimeHrs)}</div>
+          <div class="callout-box-sub">${dept.lifetimeSampleCount} closed ticket${dept.lifetimeSampleCount === 1 ? "" : "s"}, early-closures excluded</div>
+        </div>
+        <div class="callout-box">
+          <div class="callout-box-label">Most-Opened Type</div>
+          <div class="callout-box-value">${dept.mostOpenedType ? (TYPE_LABELS[dept.mostOpenedType[0]] || dept.mostOpenedType[0]) : "—"}</div>
+          <div class="callout-box-sub">${dept.mostOpenedType ? `${dept.mostOpenedType[1]} ticket${dept.mostOpenedType[1] === 1 ? "" : "s"} this period` : "No tickets this period"}</div>
+        </div>
+        <div class="callout-box">
+          <div class="callout-box-label">Client Highlight</div>
+          <div class="callout-box-value">${clientTop && clientTop.activeDaysThisMonth > 0 ? clientTop.client.name : "—"}</div>
+          <div class="callout-box-sub">${clientTop && clientTop.activeDaysThisMonth > 0 ? `${clientTop.activeDaysThisMonth} active day${clientTop.activeDaysThisMonth === 1 ? "" : "s"} this month` : "No active clients this month"}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function kpiCard() {
+  const k = kpiSummary(allTickets, PERIOD_DAYS);
+  const mixSegments = [
+    { label: "Preventive", value: k.preventive, color: "#16a34a" },
+    { label: "Corrective", value: k.corrective, color: "#dc2626" },
+  ];
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  return `
+    <div class="card">
+      <h2 style="margin:0;">Operational KPIs — ${periodLabel()}</h2>
+      <div class="chart-row" style="margin-top:12px;">
+        <div class="chart-col">
+          <div class="chart-title">Preventive vs. Corrective</div>
+          ${k.maintTotal ? `<div class="chart-donut-wrap">
+            ${svgDonutChart(mixSegments, { centerLabel: fmtPct(k.preventivePct), centerSubLabel: "preventive" })}
+            ${chartLegend(mixSegments)}
+          </div>` : emptyState("No servicing or troubleshooting tickets opened this period.", "document")}
+          <p class="small">Servicing counts as Preventive. Troubleshooting and DERE count as Corrective. Site Survey and NTP are left out.</p>
+        </div>
+        <div class="chart-col">
+          <div class="chart-title">Internal SLA Compliance</div>
+          <div class="callout-box">
+            <div class="callout-box-label">Overall</div>
+            <div class="callout-box-value">${fmtPct(k.slaPct)}</div>
+            <div class="callout-box-sub">${k.slaTotal ? `${plural(k.engOk + k.csOk, "step")} on time out of ${k.slaTotal}` : "No steps measured this period"}</div>
+          </div>
+          <p class="small" style="margin-top:8px;">Engineer review within 3 days: <strong>${fmtPct(k.engPct)}</strong> (${k.engOk}/${k.engTotal})<br>
+          CS closure within 2 days: <strong>${fmtPct(k.csPct)}</strong> (${k.csOk}/${k.csTotal})</p>
+          <p class="small">This is our internal limit, not a contract SLA. Steps still waiting past the limit count as late.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function deptDetailOverlay() {
+  const dept = departmentSummary(allTickets, PERIOD_DAYS);
+  const clientRows = clientActivitySummary(allClients, allTickets, PERIOD_DAYS);
+  const snoozed = currentlySnoozedSummary(allTickets);
+  const snoozeReasonEntries = Object.entries(dept.snoozeReasons).sort((a, b) => b[1] - a[1]);
+  const backlogSeries = [{ label: "Open tickets", values: dept.backlogTrend.map(p => p.count), color: "#2563eb" }];
+  const backlogLabels = dept.backlogTrend.map(p => p.date.slice(5));
+  const ageDist = ticketAgeDistribution(allTickets);
+  const failurePatterns = failurePatternSummary(allTickets);
+  const topClients = topClientsByVolume(allTickets, 5);
+
+  return `
+    <div class="modal-overlay" id="deptDetailOverlay" style="align-items:flex-start;">
+      <div class="modal-dialog" style="max-width:760px;margin:30px auto;">
+        <h2><span>Department Detail</span><button class="modal-close" onclick="closeDeptDetail()">&times;</button></h2>
+
+        <h3>Backlog Trend (${periodLabel()})</h3>
+        ${svgLineChart(backlogSeries, backlogLabels, { width: 680, height: 150 })}
+
+        <div class="divider"></div>
+        <h3>Average Time Per Stage</h3>
+        <table class="dc-table"><thead><tr><th>Transition</th><th>Avg Time</th><th>Sample</th></tr></thead>
+        <tbody>${dept.stageTurnarounds.map(s => `<tr><td>${STATE_LABELS[s.from] || s.from} &rarr; ${STATE_LABELS[s.to] || s.to}</td><td>${fmtHours(s.avgHrs)}</td><td>${s.count} ticket${s.count === 1 ? "" : "s"}</td></tr>`).join("")}</tbody></table>
+
+        <div class="divider"></div>
+        <h3>Report Quality</h3>
+        <p class="small">Rejection rate: <b>${fmtPct(dept.reportRejectionRatePct)}</b> (${dept.rejectedCount} rejected of ${dept.rejectedCount + dept.approvedCount} reviewed)</p>
+
+        <div class="divider"></div>
+        <h3>Currently Snoozed</h3>
+        <p class="small"><b>${snoozed.count}</b> ticket${snoozed.count === 1 ? "" : "s"} snoozed right now, <b>${fmtHours(snoozed.totalHrs)}</b> accumulated so far.
+        This is a live total for tickets still snoozed, not an all-time historical figure — there's no "unsnooze" event
+        in this system yet to measure a full history against.</p>
+        ${snoozeReasonEntries.length ? `<p class="small"><b>Reasons given:</b> ${snoozeReasonEntries.map(([r, c]) => `${r} (${c})`).join(", ")}</p>` : `<p class="small">No reasons recorded yet.</p>`}
+
+        <div class="divider"></div>
+        <h3>Client Activity This Month</h3>
+        ${clientRows.slice(0, 10).map(r => `
+          <div class="pbar-row">
+            <div class="pbar-row-name">${r.client.name}</div>
+            <div class="small" style="flex:0 0 90px;">${r.ticketCount} ticket${r.ticketCount === 1 ? "" : "s"}</div>
+            <div class="small">${r.activeDaysThisMonth} active day${r.activeDaysThisMonth === 1 ? "" : "s"}</div>
+          </div>
+        `).join("") || `<p class="small">No client data.</p>`}
+
+        <div class="divider"></div>
+        <h3>Ticket Age at Closure</h3>
+        <p class="small">Normally-resolved vs. early-closed tickets, bucketed by how long they were open. Average
+        lifetime (normal resolutions only): <b>${fmtHours(ageDist.meanHrs)}</b>.</p>
+        ${svgLineChart([
+          { label: "Resolved", values: ageDist.resolvedCounts, color: "#2563eb" },
+          { label: "Early-closed", values: ageDist.earlyCounts, color: "#d97706" },
+        ], ageDist.labels, { width: 680, height: 150 })}
+        <div class="chart-legend" style="margin-top:0;">
+          <div class="chart-legend-row"><span class="chart-legend-swatch" style="background:#2563eb;"></span><span class="chart-legend-label">Resolved</span></div>
+          <div class="chart-legend-row"><span class="chart-legend-swatch" style="background:#d97706;"></span><span class="chart-legend-label">Early-closed</span></div>
+        </div>
+        <p class="small" style="margin-top:6px;"><b>Outliers</b> (resolved tickets taking more than 2&times; the average):</p>
+        ${ageDist.outliers.length ? ageDist.outliers.slice(0, 8).map(o => `
+          <p class="small"><a href="ticket-detail.html?id=${o.t.id}">${o.t.id} — ${o.t.client}</a>: ${fmtHours(o.hrs)}</p>
+        `).join("") : `<p class="small">None in this period — nothing took dramatically longer than typical.</p>`}
+
+        <div class="divider"></div>
+        <h3>Equipment / Failure Patterns</h3>
+        <p class="small">Checklist sections that fail most often, across every visit — useful for procurement and
+        maintenance planning, not just technician review.</p>
+        ${failurePatterns.length ? svgBarChart([{ label: "Fails", bars: failurePatterns.slice(0, 6).map(([label, value], i) => ({ label, value, color: CHART_PALETTE[i % CHART_PALETTE.length] })) }], { width: 680, height: 180 }) : `<p class="small">No failed items recorded.</p>`}
+        ${failurePatterns.slice(0, 6).map(([label, value]) => `<p class="small">${label}: <b>${value}</b></p>`).join("")}
+
+        <div class="divider"></div>
+        <h3>Top Clients by Ticket Volume</h3>
+        <p class="small">${topClients.repeatCount} repeat client${topClients.repeatCount === 1 ? "" : "s"} · ${topClients.oneTimeCount} one-time client${topClients.oneTimeCount === 1 ? "" : "s"}</p>
+        ${topClients.top.map(([name, count]) => `
+          <div class="pbar-row"><div class="pbar-row-name">${name}</div><div class="small">${count} ticket${count === 1 ? "" : "s"}</div></div>
+        `).join("") || `<p class="small">No tickets yet.</p>`}
+
+        <div class="divider"></div>
+        <p class="small">Export/print view of this overlay is still scoped, not yet built.</p>
+      </div>
+    </div>
+  `;
+}
+function openDeptDetail() {
+  const old = document.getElementById("deptDetailOverlay");
+  if (old) old.remove();
+  document.body.insertAdjacentHTML("beforeend", deptDetailOverlay());
+}
+function closeDeptDetail() {
+  const el = document.getElementById("deptDetailOverlay");
+  if (el) el.remove();
+}
+function technicianCard(name) {
+  const s = technicianSummary(name, allTickets, PERIOD_DAYS);
+  const typeSegments = Object.entries(s.byType).map(([k, v], i) => ({ label: TYPE_LABELS[k] || k, value: v, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+  return `
+    <div class="ticket-block">
+      <div class="ticket-title">${name}</div>
+      <div class="field-row" style="margin-top:6px;">
+        <div><label>Completed (${periodShort()})</label><div style="font-size:18px;font-weight:800;">${s.completedInPeriod}</div></div>
+        <div><label>Unfinished (${periodShort()})</label><div style="font-size:18px;font-weight:800;color:${s.unfinishedInPeriod > 0 ? '#b91c1c' : 'inherit'};">${s.unfinishedInPeriod}</div></div>
+        <div><label>Upcoming</label><div style="font-size:18px;font-weight:800;">${s.upcomingCount}</div></div>
+      </div>
+      <div class="chart-title" style="margin-top:8px;">Completed Jobs, by Type</div>
+      ${typeSegments.length ? `<div class="chart-donut-wrap">
+        ${svgDonutChart(typeSegments, { size: 110, stroke: 18, centerLabel: s.completedInPeriod })}
+        ${chartLegend(typeSegments)}
+      </div>` : `<p class="small">Nothing completed this period.</p>`}
+      <label style="margin-top:8px;">Fail-Item Documentation</label>
+      ${s.failItems ? `${progressBar(s.documentationRatePct)}<p class="small">${s.failWithMedia} of ${s.failItems} failed items had a photo/note attached</p>` : `<p class="small">No failed items in this period.</p>`}
+    </div>
+  `;
+}
+
+function engineerCard(name) {
+  const s = engineerSummary(name, allTickets, PERIOD_DAYS);
+  const outcomeSegments = [
+    { label: "Approved", value: s.approvedCount, color: "#16a34a" },
+    { label: "Rejected", value: s.rejectedCount, color: "#dc2626" },
+  ];
+  const typeSegments = Object.entries(s.byType).map(([k, v], i) => ({ label: TYPE_LABELS[k] || k, value: v, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+  return `
+    <div class="ticket-block">
+      <div class="ticket-title">${name}</div>
+      <div class="field-row" style="margin-top:6px;">
+        <div><label>Current Queue</label><div style="font-size:18px;font-weight:800;">${s.currentQueue}</div></div>
+        <div><label>Avg Turnaround</label><div style="font-size:18px;font-weight:800;">${fmtHours(s.avgTurnaroundHrs)}</div></div>
+      </div>
+      <div class="chart-row" style="margin-top:8px;">
+        <div class="chart-col">
+          <div class="chart-title">Approved / Rejected (${periodShort()})</div>
+          <div class="chart-donut-wrap">
+            ${svgDonutChart(outcomeSegments, { size: 110, stroke: 18, centerLabel: s.reviewedInPeriod, centerSubLabel: "reviewed" })}
+            ${chartLegend(outcomeSegments)}
+          </div>
+        </div>
+        <div class="chart-col">
+          <div class="chart-title">By Job Type</div>
+          ${typeSegments.length ? `<div class="chart-donut-wrap">
+            ${svgDonutChart(typeSegments, { size: 110, stroke: 18, centerLabel: s.reviewedInPeriod })}
+            ${chartLegend(typeSegments)}
+          </div>` : `<p class="small">Nothing reviewed this period.</p>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function mostMissingSummaryHtml() {
+  const ticketGaps = fieldGapFrequency(allTickets, TICKET_COMPLETENESS_FIELDS).slice(0, 5);
+  const clientGaps = fieldGapFrequency(allClients, CLIENT_COMPLETENESS_FIELDS).slice(0, 5);
+  const row = (label, count, max) => `
+    <div class="gap-summary-row">
+      <div style="flex:0 0 150px;">${label}</div>
+      <div class="gap-summary-bar-track"><div class="gap-summary-bar-fill" style="width:${Math.round(count/max*100)}%;"></div></div>
+      <div style="flex:0 0 60px;text-align:right;">${count} ticket${count === 1 ? "" : "s"}</div>
+    </div>`;
+  const maxT = Math.max(1, ...ticketGaps.map(([, c]) => c));
+  const maxC = Math.max(1, ...clientGaps.map(([, c]) => c));
+  return `
+    <div class="field-row">
+      <div>
+        <label>Most Often Missing — Tickets</label>
+        ${ticketGaps.length ? ticketGaps.map(([l, c]) => row(l, c, maxT)).join("") : `<p class="small">No gaps department-wide.</p>`}
+      </div>
+      <div>
+        <label>Most Often Missing — Clients</label>
+        ${clientGaps.length ? clientGaps.map(([l, c]) => row(l, c, maxC)).join("") : `<p class="small">No gaps department-wide.</p>`}
+      </div>
+    </div>
+    <div class="divider"></div>
+  `;
+}
+
+function recordRow(kind, id, name, pct, item, fieldDefs, href) {
+  const detailKey = `${kind}-${id}`;
+  const open = recordExpand[detailKey];
+  return `
+    <div class="pbar-row" style="align-items:flex-start;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:10px;width:100%;cursor:pointer;" onclick="toggleRecordDetail('${detailKey}')">
+        <div class="pbar-row-name"><a href="${href}" onclick="event.stopPropagation();">${name}</a></div>
+        <div class="pbar-row-track">${progressBar(pct)}</div>
+      </div>
+      ${open ? `<div style="width:100%;padding:6px 0 2px;">
+        ${segmentedCompletenessBar(item, fieldDefs)}
+        <p class="small">${fieldCompleteness(item, fieldDefs).missing.join(", ") || "Nothing missing."}</p>
+      </div>` : ""}
+    </div>
+  `;
+}
+function toggleRecordDetail(key) { recordExpand[key] = !recordExpand[key]; render(); }
+
+function csCard(name) {
+  const s = csSummary(name, allTickets, allClients, PERIOD_DAYS);
+  const ticketListOpen = expandedGaps[name] === "tickets";
+  const clientListOpen = expandedGaps[name] === "clients";
+  const myTickets = allTickets.filter(t => t.event_log[0] && t.event_log[0].actor === name);
+  const myClients = allClients.filter(c => c.created_by === name);
+  return `
+    <div class="ticket-block">
+      <div class="ticket-title">${name}</div>
+      <label style="margin-top:8px;">Ticket Detail Completeness</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">${progressBar(s.ticketCompletenessPct === null ? 100 : s.ticketCompletenessPct, { onclick: `toggleGaps('${name}','tickets')` })}</div>
+        <span class="small">${myTickets.length} ticket${myTickets.length === 1 ? "" : "s"}</span>
+      </div>
+      ${ticketListOpen ? myTickets.map(t => recordRow("t", t.id, `${t.id} — ${t.client}`, ticketCompleteness(t).pct, t, TICKET_COMPLETENESS_FIELDS, `ticket-detail.html?id=${t.id}`)).join("") || `<p class="small">No tickets yet.</p>` : ""}
+
+      <label style="margin-top:10px;">Client Detail Completeness</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">${progressBar(s.clientCompletenessPct === null ? 100 : s.clientCompletenessPct, { onclick: `toggleGaps('${name}','clients')` })}</div>
+        <span class="small">${myClients.length} client${myClients.length === 1 ? "" : "s"}</span>
+      </div>
+      ${clientListOpen ? myClients.map(c => recordRow("c", c.id, c.name, clientCompleteness(c).pct, c, CLIENT_COMPLETENESS_FIELDS, `client-detail.html?id=${c.id}`)).join("") || `<p class="small">No clients yet.</p>` : ""}
+    </div>
+  `;
+}
+function toggleGaps(name, kind) {
+  expandedGaps[name] = expandedGaps[name] === kind ? null : kind;
+  render();
+}
+
+async function render() {
+  let tickets, clients, accounts;
+  try {
+    [{ tickets }, { clients }, { accounts }] = await Promise.all([
+      api("/api/tickets"), api("/api/clients"), api("/api/accounts"),
+    ]);
+  } catch (err) {
+    // Show a message instead of staying on the loading skeleton forever.
+    document.getElementById("root").innerHTML = `<div class="card">${emptyState("Could not load analytics. Please refresh the page.", "document")}</div>`;
+    return;
+  }
+  allTickets = tickets; allClients = clients; allAccounts = accounts;
+
+  const technicians = accounts.filter(a => a.role === "technician");
+  const engineers = accounts.filter(a => a.role === "engineer");
+  const csAccounts = accounts.filter(a => a.role === "cs" || a.role === "admin");
+
+  const periodSelect = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <label for="periodSelect" style="margin:0;">Period</label>
+      <select id="periodSelect" onchange="setPeriod(this.value)" style="width:auto;min-width:170px;">
+        ${PERIOD_OPTIONS.map(o => `<option value="${o.key}"${o.key === periodKey ? " selected" : ""}>${o.label}</option>`).join("")}
+      </select>
+    </div>`;
+
+  document.getElementById("root").innerHTML = `
+    ${periodSelect}
+    ${departmentCard()}
+
+    ${kpiCard()}
+
+    <div class="role-grid">
+      <div class="card">
+        <h2>Customer Service</h2>
+        <p class="small">HOD included here too, since HOD also handles CS-type work. Completeness is measured
+        against everything they've ever created, not just this period.</p>
+        ${mostMissingSummaryHtml()}
+        <div class="person-grid">${csAccounts.map(a => csCard(a.name)).join("")}</div>
+      </div>
+
+      <div class="card">
+        <h2>Engineers</h2>
+        <div class="person-grid">${engineers.map(a => engineerCard(a.name)).join("")}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Technicians</h2>
+      <p class="small">Workload and quality signals over ${periodLabel()}. Checklist fill time is
+      deliberately not tracked here — timing a safety inspection would reward speed on the wrong thing.</p>
+      <div class="person-grid">${technicians.map(a => technicianCard(a.name)).join("")}</div>
+    </div>
+  `;
+}
+render();
+</script>
+</body>
+</html>

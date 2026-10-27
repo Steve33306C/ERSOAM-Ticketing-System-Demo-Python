@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety Checklist — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "engineer", "cs", "technician"]);
+const isTech = session.role === "technician";
+// Who may fill in / submit the checklist: technicians, plus an engineer on an
+// engineer-only visit (a day with no technicians where they are the engineer).
+// Decided once the visit day is loaded (see init()); everyone else is read-only.
+let canFill = isTech;
+// Phone layout for technicians, and for an engineer on a phone-sized screen.
+const mobileShell = isTech || (session.role === "engineer" && window.matchMedia("(max-width: 768px)").matches);
+if (mobileShell) {
+  renderMobileShell({ pageTitle: "Safety Checklist", session, active: isTech ? "checklist-list.html" : "dashboard-engineer.html" });
+} else {
+  renderShell({ active: "safety", role: session.role, session, pageTitle: "Safety Checklist", pageSubtitle: "Filled out on site by the technician (or by the engineer on an engineer-only visit)." });
+}
+document.getElementById("pageContent").innerHTML = `<div id="root"><div class="empty">Loading…</div></div>`;
+
+const ticketId = getQueryParam("id");
+const requestedDayId = getQueryParam("day") ? Number(getQueryParam("day")) : null;
+const STAGES = ["pre", "during", "post"];
+let ticket = null;
+let day = null;
+let items = [];
+let locked = false;
+let readOnly = false; // true whenever editing controls must not show
+let blockedReason = null; // set when a technician can't interact with this day at all today
+let mode = "checklist"; // "checklist" = long-scroll form, "photo" = report media capture
+
+function stageIndices(stage) {
+  const out = [];
+  items.forEach((it, i) => { if (it.stage === stage) out.push(i); });
+  return out;
+}
+// "Answered" means actually saved — a Fail still waiting on a remark/photo
+// (item._pendingSave) doesn't count yet, even though its pill is selected.
+function isAnswered(item) { return item.status !== null && !item._pendingSave; }
+
+function stageProgress(stage) {
+  const idx = stageIndices(stage);
+  const done = idx.filter(i => isAnswered(items[i])).length;
+  return { done, total: idx.length };
+}
+// Groups consecutive items by section (within a stage) so the long-scroll
+// view reads as one card per section, same grouping the old stage-review
+// screen used — section name once, then each item underneath it.
+function groupedSections() {
+  const groups = [];
+  items.forEach((it, i) => {
+    const last = groups[groups.length - 1];
+    if (last && last.section === it.section && last.stage === it.stage) last.indices.push(i);
+    else groups.push({ stage: it.stage, section: it.section, indices: [i] });
+  });
+  return groups;
+}
+
+function toggleMode() { mode = mode === "checklist" ? "photo" : "checklist"; renderCurrent(); }
+
+// Remark + Camera/Gallery are inline fields on every item row (not a popup).
+// The note/attachments typed there live as a local "draft" on items[i] —
+// items[].note / items[].attachments already hold whatever was last saved,
+// and edits here update that same draft in place. The draft only reaches
+// the server when a status button is tapped (Pass/Fail/N/A all send
+// whatever is currently in the draft), matching the one-call-per-save
+// shape the rest of this prototype's actions use. Fail is the only status
+// that requires the draft to be non-empty before it can be saved — Pass
+// and N/A go through with an empty draft just as easily.
+
+// Pass/N/A save straight away. Fail is special: tapping it always selects
+// Fail right away (the pill highlights immediately — you can switch to it
+// from Pass or N/A with one tap, same as any other status), but it only
+// actually reaches the server once a remark or a photo/file is attached.
+// Until then the item sits in a "pending" state — shown inline under the
+// remark box, not as a toast that vanishes — and doesn't count toward
+// "answered" for the progress bar or the submit gate.
+function answerItem(i, status) {
+  const item = items[i];
+  if (status !== "fail") {
+    const note = (item.note || "").trim();
+    const attachments = item.attachments || [];
+    doAction(ticketId, "checklist_item",
+      { day_id: day.id, item_id: item.id, status, note, attachments, actor: session.name },
+      () => { item.status = status; item.note = note; item._pendingSave = false; renderCurrent(); },
+      (m) => showToast(m));
+    return;
+  }
+  item.status = "fail";
+  trySaveFailDraft(i, true);
+}
+
+// Attempts to persist a Fail with whatever note/attachments are currently
+// on the item. If both are still empty, nothing is sent — the item is left
+// marked "pending" so renderChecklistItemRow can show the inline warning.
+function trySaveFailDraft(i, rerender) {
+  const item = items[i];
+  const note = (item.note || "").trim();
+  const attachments = item.attachments || [];
+  if (!note && attachments.length === 0) {
+    item._pendingSave = true;
+    if (rerender) renderCurrent();
+    return;
+  }
+  doAction(ticketId, "checklist_item",
+    { day_id: day.id, item_id: item.id, status: "fail", note, attachments, actor: session.name },
+    () => { item.note = note; item._pendingSave = false; renderCurrent(); },
+    (m) => showToast(m));
+}
+
+// Plain update of the in-memory draft as the technician types — deliberately
+// does NOT re-render (would steal focus / reset the cursor mid-sentence).
+function updateItemNote(i, value) { items[i].note = value; }
+
+// Once they leave the remark box, silently complete a pending Fail save if
+// there's now something to save it with.
+function handleRemarkBlur(i) {
+  if (items[i].status === "fail" && items[i]._pendingSave) trySaveFailDraft(i, true);
+}
+
+function addItemAttachment(i, kind) {
+  const label = prompt(`${kind === "photo" ? "Photo" : "File"} label (this demo can't capture real media — enter a filename to represent it):`, `${kind}-${Date.now()}.${kind === "photo" ? "jpg" : "pdf"}`);
+  if (!label) return;
+  if (!items[i].attachments) items[i].attachments = [];
+  items[i].attachments.push(label);
+  if (items[i].status === "fail") trySaveFailDraft(i, true);
+  else renderCurrent();
+}
+function removeItemAttachment(i, attIndex) {
+  items[i].attachments.splice(attIndex, 1);
+  // Removing the last attachment/note can drop a saved Fail back below the
+  // requirement — re-validate so the pending warning reappears if needed.
+  if (items[i].status === "fail") trySaveFailDraft(i, true);
+  else renderCurrent();
+}
+
+// --- Long-scroll layout: every section is a card, every item is a row with
+// its own Pass/Fail/N/A pills plus an always-visible remark + Camera/Gallery
+// area underneath (matching the real ERS checklist screen).
+
+// Phase metadata for the banner cards — number, heading, subtitle and
+// accent colours, matching the three-phase layout the real ERS checklist
+// uses (pre/during/post keep their existing stage keys underneath).
+const STAGE_META = {
+  pre: { phase: 1, title: "BEFORE (PRE-WORK)", subtitle: "To be completed before commencing work", bg: "#dbeeff", accent: "#1d4ed8", icon: "stopwatch" },
+  during: { phase: 2, title: "PRESENT (DURING WORK)", subtitle: "To be monitored and checked during active execution", bg: "#ffe9cf", accent: "#c2410c", icon: "warning" },
+  post: { phase: 3, title: "AFTER (POST-WORK)", subtitle: "To be completed after work finishes and before handover", bg: "#d9f2e3", accent: "#15803d", icon: "check" },
+};
+
+function renderChecklistItemRow(i) {
+  const item = items[i];
+  const canEdit = canFill && !readOnly;
+  const isFail = item.status === "fail";
+  const pending = isFail && item._pendingSave;
+  const note = item.note || "";
+  const attachments = item.attachments || [];
+  return `
+    <div class="checklist-row${isFail ? " checklist-row-fail" : ""}">
+      <div class="checklist-row-text">${renderChecklistText(item.text)}</div>
+      ${canEdit ? `
+        <div class="checklist-row-actions">
+          <button class="check-pill check-pill-pass${item.status === "pass" ? " check-pill-active" : ""}" onclick="answerItem(${i},'pass')">&#10003; Pass</button>
+          <button class="check-pill check-pill-fail${isFail ? " check-pill-active" : ""}" onclick="answerItem(${i},'fail')">&#10005; Fail</button>
+          <button class="check-pill check-pill-na${item.status === "na" ? " check-pill-active" : ""}" onclick="answerItem(${i},'na')">&minus; N/A</button>
+        </div>
+        ${pending ? `<p class="checklist-fail-warning">&#9888; Remark or photo/file required to save this Fail</p>` : ""}
+        <textarea class="checklist-row-remark${pending ? " checklist-row-remark-required" : ""}" rows="2" placeholder="Add remark or rectification note (optional, required if marked Fail)…" oninput="updateItemNote(${i}, this.value)" onblur="handleRemarkBlur(${i})">${note}</textarea>
+        ${attachments.length ? `<div class="photo-chip-list" style="margin-bottom:10px;">${attachments.map((a, ai) => `<span class="badge badge-type">${a} <span style="cursor:pointer;" onclick="removeItemAttachment(${i},${ai})">&times;</span></span>`).join("")}</div>` : ""}
+        <div class="checklist-row-media">
+          <button class="secondary" onclick="addItemAttachment(${i},'photo')">&#128247; Camera</button>
+          <button class="secondary" onclick="addItemAttachment(${i},'file')">&#128206; Gallery/Files</button>
+        </div>
+      ` : `
+        <span class="status-chip ${checklistStatusChipClass(item.status)}">${CHECKLIST_STATUS_LABELS[item.status] || "Not answered"}</span>
+        ${note || attachments.length ? `
+          <div class="checklist-fail-detail">
+            ${note ? `<p class="small checklist-row-status"><b>Note:</b> ${note}</p>` : ""}
+            ${attachments.length ? `<div class="photo-chip-list">${attachments.map(a => `<span class="badge badge-type">${a}</span>`).join("")}</div>` : ""}
+          </div>
+        ` : ""}
+      `}
+    </div>
+  `;
+}
+
+function renderLongScroll() {
+  const groups = groupedSections();
+  const answeredCount = items.filter(isAnswered).length;
+  const media = (ticket.report && ticket.report.media) || {};
+  const totalPhotos = REPORT_MEDIA_CATEGORIES.reduce((sum, [key]) => sum + ((media[key] || []).length), 0);
+  const backHref = (isTech || canFill) ? `job-detail.html?id=${ticketId}` : `ticket-detail.html?id=${ticket.id}`;
+
+  let html = `<a class="back-link" href="${backHref}">&larr; Back</a>`;
+  if (!isTech) {
+    html += `
+      <div class="card">
+        <div class="detail-header">
+          <div><h2 style="margin:0;">Safety Checklist — ${day.date}</h2>
+          <div class="ticket-meta">${ticket.client} · Technicians: ${(day.technicians || []).join(", ") || (day.engineer ? "none (engineer only)" : "—")} · Engineer: ${day.engineer || "—"}</div></div>
+          <span class="badge ${checklistStatusChipClass(day.status === "submitted" ? "pass" : day.status === "unfinished" ? "fail" : null)}">${dayStatusLabel(day)}</span>
+        </div>
+        <p class="small">Started: ${fmtTime(day.checklist.checklist_started_at)} · Completed: ${fmtTime(day.checklist.checklist_completed_at)}</p>
+      </div>`;
+  }
+  if (locked) html += `<div class="readonly-answer" style="background:#dcfce7;color:#15803d;">&#10003; Checklist submitted — full summary below</div>`;
+
+  let sectionNum = 0;
+  STAGES.forEach(stage => {
+    const stageGroups = groups.filter(g => g.stage === stage);
+    if (!stageGroups.length) return;
+    const { done, total } = stageProgress(stage);
+    const meta = STAGE_META[stage];
+    html += `
+      <div class="phase-banner" style="background:${meta.bg};color:${meta.accent};">
+        <div class="phase-banner-icon">${icon(meta.icon)}</div>
+        <div>
+          <span class="phase-banner-pill" style="background:${meta.accent};">PHASE ${meta.phase}</span>
+          <div class="phase-banner-title">${meta.title}</div>
+          <div class="phase-banner-subtitle">${meta.subtitle} · ${done} of ${total} answered</div>
+        </div>
+      </div>`;
+    html += stageGroups.map(g => {
+      sectionNum++;
+      const secDone = g.indices.filter(i => isAnswered(items[i])).length;
+      const secTotal = g.indices.length;
+      const pct = Math.round((secDone / secTotal) * 100);
+      return `
+        <div class="card checklist-section-card">
+          <div class="checklist-section-head">
+            <span class="checklist-section-num">${sectionNum}</span>
+            <h3>${g.section}</h3>
+            <span class="checklist-section-pct">${secDone} of ${secTotal} answered (${pct}%)</span>
+          </div>
+          ${g.indices.map(i => renderChecklistItemRow(i)).join("")}
+        </div>`;
+    }).join("");
+  });
+
+  html += renderGeneralRemarksCard();
+
+  // Report-media capture (categorised install/issue photos) sits below
+  // General Remarks, right above the submit bar — whoever fills the checklist only.
+  if (canFill) {
+    html += `
+      <button class="stage-select-card stage-photo" onclick="toggleMode()">
+        <div><div class="stage-select-title">Photos</div>
+        <div class="stage-select-progress">${totalPhotos} photo${totalPhotos === 1 ? "" : "s"} taken</div></div>
+        <div class="stage-select-check">&#128247;</div>
+      </button>`;
+  }
+
+  if (locked) {
+    html += `<button class="mobile-btn mobile-btn-primary" onclick="location.href='${backHref}'">&larr; Back to Job Detail</button>`;
+  }
+
+  document.getElementById("root").innerHTML = html;
+  renderStatusBar(items.length, answeredCount, backHref);
+}
+
+// Sticky bar pinned to the bottom of the screen: live progress on the left,
+// Save & Exit + Complete Checklist on the right (always visible — Complete
+// Checklist surfaces the "X item(s) still need an answer" error itself if
+// something's missing, same as the backend already enforces).
+function renderStatusBar(total, answeredCount, backHref) {
+  removeStatusBar();
+  if (!canFill || readOnly) return;
+  const pct = total ? Math.round((answeredCount / total) * 100) : 0;
+  document.getElementById("pageContent").insertAdjacentHTML("beforeend", `
+    <div class="checklist-status-bar">
+      <div class="checklist-status-bar-row">
+        <span class="checklist-status-bar-text">Status: ${answeredCount} of ${total} answered (${pct}%)</span>
+        <div class="checklist-status-bar-actions">
+          <button class="secondary" onclick="saveAndExit('${backHref}')">Save &amp; Exit</button>
+          <button class="mobile-btn mobile-btn-primary" style="margin:0;" onclick="doSubmit()">&#10003; Complete Checklist</button>
+        </div>
+      </div>
+    </div>`);
+}
+
+// Every item already auto-saves itself the moment it's answered — the only
+// thing that can still be sitting unsaved locally is the General Remarks
+// textarea (it only saves on blur). Flush it, then leave. Lets a technician
+// do the pre/during sections now, step away, and come back later for post.
+function saveAndExit(backHref) {
+  // NTP's checklist has no General Remarks box — the PDF upload already
+  // saves itself the instant it's picked, so there's nothing left to flush.
+  if (day.checklist.template === "ntp") { location.href = backHref; return; }
+  const input = document.getElementById("generalRemarksInput");
+  const remarks = input ? input.value : (day.checklist.general_remarks || "");
+  doAction(ticketId, "checklist_general",
+    { day_id: day.id, remarks, media: day.checklist.general_media || [], actor: session.name },
+    () => { location.href = backHref; },
+    () => { location.href = backHref; }); // items already saved individually — still leave even if this last save fails
+}
+
+// Fires on blur of the General Remarks box — silent (no toast) so it
+// doesn't interrupt typing elsewhere; only sends a request if it changed.
+function saveGeneralRemarksSilently() {
+  const input = document.getElementById("generalRemarksInput");
+  if (!input) return;
+  const remarks = input.value;
+  if (remarks === (day.checklist.general_remarks || "")) return;
+  doAction(ticketId, "checklist_general",
+    { day_id: day.id, remarks, media: day.checklist.general_media || [], actor: session.name },
+    () => { day.checklist.general_remarks = remarks; },
+    (m) => showToast(m));
+}
+
+function renderGeneralRemarksCard() {
+  const canEdit = canFill && !readOnly;
+  const remarks = day.checklist.general_remarks || "";
+  const media = day.checklist.general_media || [];
+  return `
+    <div class="card">
+      <h3>General Remarks / Inspection Notes</h3>
+      ${canEdit
+        ? `<textarea id="generalRemarksInput" rows="3" placeholder="Enter any additional observations, team signatures summary, or follow-up requirements…" onblur="saveGeneralRemarksSilently()">${remarks}</textarea>`
+        : `<p class="small">${remarks || "No remarks added."}</p>`}
+      ${canEdit ? `
+        <div class="divider"></div>
+        <h3>Attached Remarks &amp; Inspection Media <span style="text-transform:none;font-weight:500;color:var(--muted);">(Optional)</span></h3>
+        <div class="media-dropzone" onclick="addGeneralMedia('photo')">
+          <div class="media-dropzone-icon">&#9729;&#65039;</div>
+          <div><span class="media-dropzone-cta">Click to upload media</span> or drag and drop</div>
+          <div class="media-dropzone-hint">Photos or files to represent what was inspected (this demo can't capture real media)</div>
+          <div class="media-dropzone-actions">
+            <button class="secondary" onclick="event.stopPropagation(); addGeneralMedia('photo')">&#128247; Take Photo</button>
+            <button class="secondary" onclick="event.stopPropagation(); addGeneralMedia('file')">&#128193; Browse Files</button>
+          </div>
+        </div>
+        ${media.length ? `<div id="generalMediaList" class="photo-chip-list" style="margin-top:10px;">${media.map((a, i) => `<span class="badge badge-type">${a} <span style="cursor:pointer;" onclick="removeGeneralMedia(${i})">&times;</span></span>`).join("")}</div>` : ""}
+      ` : (media.length ? `
+        <div class="divider"></div>
+        <label>Photos / Files</label>
+        <div class="photo-chip-list">${media.map(a => `<span class="badge badge-type">${a}</span>`).join("")}</div>
+      ` : "")}
+    </div>
+  `;
+}
+
+function addGeneralMedia(kind) {
+  const label = prompt(`${kind === "photo" ? "Photo" : "File"} label (this demo can't capture real media — enter a filename to represent it):`, `${kind}-${Date.now()}.${kind === "photo" ? "jpg" : "pdf"}`);
+  if (!label) return;
+  const media = [...(day.checklist.general_media || []), label];
+  doAction(ticketId, "checklist_general",
+    { day_id: day.id, remarks: day.checklist.general_remarks || "", media, actor: session.name },
+    () => { day.checklist.general_media = media; renderCurrent(); },
+    (m) => showToast(m));
+}
+
+function removeGeneralMedia(i) {
+  const media = [...(day.checklist.general_media || [])];
+  media.splice(i, 1);
+  doAction(ticketId, "checklist_general",
+    { day_id: day.id, remarks: day.checklist.general_remarks || "", media, actor: session.name },
+    () => { day.checklist.general_media = media; renderCurrent(); },
+    (m) => showToast(m));
+}
+
+function renderPhotoMode() {
+  const media = (ticket.report && ticket.report.media) || {};
+  document.getElementById("root").innerHTML = `
+    <a class="back-link" style="cursor:pointer;" onclick="toggleMode()">&larr; Back</a>
+    <h2 style="margin:4px 4px 4px;">Tap a category to open the camera</h2>
+    <p class="small" style="margin:0 4px 14px;">No typing needed. Wrong photo? The office can remove it later.</p>
+    <div class="photo-tile-grid">
+      ${REPORT_MEDIA_CATEGORIES.map(([key, label, color]) => {
+        const count = (media[key] || []).length;
+        return `<button class="photo-tile" id="tile-${key}" style="background:${color};" onclick="openCameraView('${key}')">
+          <div class="photo-tile-icon">&#128247;</div>
+          <div class="photo-tile-label">${label}</div>
+          <div class="photo-tile-count">${count} photo${count === 1 ? "" : "s"}</div>
+        </button>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+let activeCameraCategory = null;
+let cameraShotCount = 0;
+
+function openCameraView(category) {
+  activeCameraCategory = category;
+  const media = (ticket.report && ticket.report.media) || {};
+  cameraShotCount = (media[category] || []).length;
+  renderCamera();
+}
+function closeCameraView() {
+  activeCameraCategory = null;
+  renderPhotoMode();
+}
+function renderCamera() {
+  const [, catLabel, color] = mediaCategoryMeta(activeCameraCategory);
+  document.getElementById("root").innerHTML = `
+    <div class="camera-view">
+      <div class="camera-topbar">
+        <button class="camera-back" onclick="closeCameraView()">&larr; Done</button>
+        <div class="camera-category-label">${catLabel}</div>
+        <div class="camera-count">${cameraShotCount} photo${cameraShotCount === 1 ? "" : "s"}</div>
+      </div>
+      <div class="camera-viewfinder" style="--vf-color:${color};">
+        <div class="vf-glow"></div>
+        <div class="vf-corner vf-tl"></div>
+        <div class="vf-corner vf-tr"></div>
+        <div class="vf-corner vf-bl"></div>
+        <div class="vf-corner vf-br"></div>
+        <div class="vf-reticle"></div>
+        <div id="capturedPulse" class="camera-captured-pulse">&#10003;</div>
+        <div class="vf-hint">Point at the ${catLabel.toLowerCase()} and tap the shutter</div>
+      </div>
+      <div class="camera-controls">
+        <button class="camera-shutter" id="shutterBtn" onclick="takeShot()" aria-label="Take photo"></button>
+      </div>
+    </div>
+    <div id="cameraFlash" class="camera-flash"></div>
+  `;
+}
+function takeShot() {
+  const shutter = document.getElementById("shutterBtn");
+  if (shutter) shutter.disabled = true;
+  const flash = document.getElementById("cameraFlash");
+  if (flash) { flash.classList.remove("flashing"); void flash.offsetWidth; flash.classList.add("flashing"); }
+  const [, catLabel] = mediaCategoryMeta(activeCameraCategory);
+  const label = pseudoPhotoLabel(catLabel);
+  doAction(ticketId, "report_add_media", { category: activeCameraCategory, label, actor: session.name }, () => {
+    if (!ticket.report.media[activeCameraCategory]) ticket.report.media[activeCameraCategory] = [];
+    ticket.report.media[activeCameraCategory].push(label);
+    cameraShotCount++;
+    const countEl = document.querySelector(".camera-count");
+    if (countEl) countEl.textContent = `${cameraShotCount} photo${cameraShotCount === 1 ? "" : "s"}`;
+    const pulse = document.getElementById("capturedPulse");
+    if (pulse) { pulse.classList.remove("show"); void pulse.offsetWidth; pulse.classList.add("show"); }
+    showToast("&#10003; Captured");
+    if (shutter) shutter.disabled = false;
+  }, (m) => { if (shutter) shutter.disabled = false; showToast(m); });
+}
+
+// --- NTP Phase 1-4: no Pass/Fail/N/A items at all, just a single PDF
+// upload slot (day.checklist.pdf_file) — same started-timer / Save & Exit /
+// Complete Checklist / locked-summary shell as the item-based checklists
+// above, just with one upload card instead of the phase banners + sections.
+
+function addNtpPdf() {
+  const label = prompt("PDF file name (this demo can't capture a real file — enter a filename to represent it):", `NTP-Document-${Date.now()}.pdf`);
+  if (!label) return;
+  doAction(ticketId, "checklist_pdf",
+    { day_id: day.id, pdf_file: label, actor: session.name },
+    () => { day.checklist.pdf_file = label; renderCurrent(); },
+    (m) => showToast(m));
+}
+
+function removeNtpPdf() {
+  doAction(ticketId, "checklist_pdf",
+    { day_id: day.id, pdf_file: "", actor: session.name },
+    () => { day.checklist.pdf_file = null; renderCurrent(); },
+    (m) => showToast(m));
+}
+
+function renderNtpPdfCard() {
+  const canEdit = canFill && !readOnly;
+  const pdfFile = day.checklist.pdf_file;
+  return `
+    <div class="card">
+      <h3>NTP Document Upload</h3>
+      ${canEdit ? `
+        <div class="media-dropzone" onclick="addNtpPdf()">
+          <div class="media-dropzone-icon">&#128196;</div>
+          <div><span class="media-dropzone-cta">Click to upload PDF</span> or drag and drop</div>
+          <div class="media-dropzone-hint">Upload the NTP document for this phase (this demo can't capture a real file). Uploading a new file replaces the current one.</div>
+          <div class="media-dropzone-actions">
+            <button class="secondary" onclick="event.stopPropagation(); addNtpPdf()">&#128196; Choose PDF File</button>
+          </div>
+        </div>
+        ${pdfFile ? `<div class="photo-chip-list" style="margin-top:10px;"><span class="badge badge-type">${pdfFile} <span style="cursor:pointer;" onclick="removeNtpPdf()">&times;</span></span></div>` : ""}
+      ` : (pdfFile
+        ? `<div class="photo-chip-list"><span class="badge badge-type">${pdfFile}</span></div>`
+        : `<p class="small">No PDF uploaded.</p>`)}
+    </div>
+  `;
+}
+
+function renderNtpChecklist() {
+  const backHref = (isTech || canFill) ? `job-detail.html?id=${ticketId}` : `ticket-detail.html?id=${ticket.id}`;
+  let html = `<a class="back-link" href="${backHref}">&larr; Back</a>`;
+  if (!isTech) {
+    html += `
+      <div class="card">
+        <div class="detail-header">
+          <div><h2 style="margin:0;">Safety Checklist — ${day.date}</h2>
+          <div class="ticket-meta">${ticket.client} · Technicians: ${(day.technicians || []).join(", ") || (day.engineer ? "none (engineer only)" : "—")} · Engineer: ${day.engineer || "—"}</div></div>
+          <span class="badge ${checklistStatusChipClass(day.status === "submitted" ? "pass" : day.status === "unfinished" ? "fail" : null)}">${dayStatusLabel(day)}</span>
+        </div>
+        <p class="small">Started: ${fmtTime(day.checklist.checklist_started_at)} · Completed: ${fmtTime(day.checklist.checklist_completed_at)}</p>
+      </div>`;
+  }
+  if (locked) html += `<div class="readonly-answer" style="background:#dcfce7;color:#15803d;">&#10003; Checklist submitted — full summary below</div>`;
+
+  html += renderNtpPdfCard();
+
+  if (locked) {
+    html += `<button class="mobile-btn mobile-btn-primary" onclick="location.href='${backHref}'">&larr; Back to Job Detail</button>`;
+  }
+
+  document.getElementById("root").innerHTML = html;
+  renderStatusBar(1, day.checklist.pdf_file ? 1 : 0, backHref);
+}
+
+function renderBlocked() {
+  document.getElementById("root").innerHTML = `
+    <a class="back-link" href="job-detail.html?id=${ticketId}">&larr; Back</a>
+    <div class="empty" style="padding:80px 0;font-size:16px;">${blockedReason}</div>
+  `;
+}
+
+// Defensive fallback only — every ticket type listed in shared.js's
+// SAFETY_CHECKLIST_TYPES now has real content (residential/C&I items or the
+// NTP PDF upload), so this only fires for a genuinely unknown/future type.
+function renderNotAvailable() {
+  const backHref = (isTech || canFill) ? `job-detail.html?id=${ticketId}` : `ticket-detail.html?id=${ticketId}`;
+  const typeLabel = (typeof TYPE_LABELS !== "undefined" && TYPE_LABELS[ticket.type]) || ticket.type;
+  document.getElementById("root").innerHTML = `
+    <a class="back-link" href="${backHref}">&larr; Back</a>
+    <div class="empty" style="padding:60px 20px;font-size:16px;">
+      <div style="font-size:36px;margin-bottom:10px;">&#128203;</div>
+      <b>Safety Checklist — Coming Soon</b>
+      <p class="small" style="margin-top:8px;">
+        ${typeLabel} doesn't use a safety checklist. It'll get a simple PDF upload here instead.
+      </p>
+    </div>
+  `;
+}
+
+function removeStatusBar() {
+  const old = document.querySelector(".checklist-status-bar");
+  if (old) old.remove();
+}
+
+function renderCurrent() {
+  if (blockedReason) { removeStatusBar(); renderBlocked(); return; }
+  if (mode === "photo") { removeStatusBar(); renderPhotoMode(); return; }
+  if (day.checklist.template === "ntp") { renderNtpChecklist(); return; }
+  renderLongScroll();
+}
+
+// Fasa 6 audit (3 Okt) — doSubmit() made 1-2 API calls with no guard against
+// a fast double-click/double-tap firing the submit twice before the first
+// one finishes (the button itself was never disabled while the request was
+// in flight). Low risk (server re-validates and is effectively idempotent-ish
+// here) but still worth closing — this flag makes a second click while one
+// submit is already running a no-op instead of a duplicate request.
+let _submittingChecklist = false;
+
+async function doSubmit() {
+  if (_submittingChecklist) return;
+  _submittingChecklist = true;
+  const finish = () => {
+    doAction(ticketId, "submit_checklist", { day_id: day.id, actor: session.name }, () => {
+      _submittingChecklist = false;
+      locked = true; readOnly = true;
+      renderCurrent();
+    }, (m) => { _submittingChecklist = false; showToast(m); });
+  };
+  // NTP has no General Remarks box to flush — go straight to submitting.
+  if (day.checklist.template === "ntp") { finish(); return; }
+  // Flush a General Remarks edit still sitting in the textarea (only saves
+  // on blur) so Submit never drops text the technician just typed.
+  const input = document.getElementById("generalRemarksInput");
+  const remarks = input ? input.value : (day.checklist.general_remarks || "");
+  if (input && remarks !== (day.checklist.general_remarks || "")) {
+    doAction(ticketId, "checklist_general",
+      { day_id: day.id, remarks, media: day.checklist.general_media || [], actor: session.name },
+      () => { day.checklist.general_remarks = remarks; finish(); },
+      () => finish()); // still attempt submit even if this last save fails
+  } else {
+    finish();
+  }
+}
+
+async function init() {
+  try {
+    ticket = await api(`/api/tickets/${ticketId}`);
+  } catch (e) {
+    document.getElementById("root").innerHTML = `<div class="empty">Job not found.</div>`;
+    return;
+  }
+  if (!isSafetyChecklistType(ticket.type)) { renderNotAvailable(); return; }
+  const days = ticket.visit_days || [];
+  if (!days.length) {
+    document.getElementById("root").innerHTML = `<div class="empty">No visit days scheduled for this job yet.</div>`;
+    return;
+  }
+  day = requestedDayId ? days.find(d => d.id === requestedDayId) : (todaysVisitDay(ticket) || nextUpcomingVisitDay(ticket) || days[days.length - 1]);
+  if (!day) {
+    document.getElementById("root").innerHTML = `<div class="empty">That visit day wasn't found.</div>`;
+    return;
+  }
+  // A technician may open a checklist only for a visit their own team is on (same rule as Job Details).
+  if (isTech) {
+    try {
+      const { accounts } = await api("/api/accounts");
+      const byName = Object.fromEntries(accounts.map(a => [a.name, a]));
+      const me = byName[session.name];
+      if (!isMyTeamDay(day, Object.assign({}, session, { team: me ? me.team : session.team }), byName)) {
+        document.getElementById("root").innerHTML = `<div class="empty">This job isn't assigned to your team.</div>`;
+        return;
+      }
+    } catch (e) { /* if the check can't run, the server still refuses a wrong-team save */ }
+  }
+  items = day.checklist.items;
+  locked = day.status === "submitted";
+  canFill = isTech || (session.role === "engineer" && (day.technicians || []).length === 0 && day.engineer === session.name);
+  readOnly = !canFill || locked;
+
+  const today = todayYmd();
+  if (canFill && !locked) {
+    if (day.date > today) { blockedReason = `This checklist opens on ${day.date} — come back on the day.`; }
+    else if (day.date < today) { blockedReason = `This checklist was for ${day.date} and is now past due — it's been marked unfinished.`; }
+  }
+
+  if (!blockedReason && canFill && !locked && !day.checklist.checklist_started_at && day.date === today) {
+    // Safety net: even with todayYmd() now matching the server's Malaysia-time "today",
+    // a client clock that's wrong/skewed could still get a 400 here. Don't
+    // let that leave the whole page stuck on "Loading…" (uncaught promise
+    // rejection used to abort init() right before renderCurrent() ran) —
+    // fall back to the same "not yet" messaging used above and still render.
+    try {
+      await api(`/api/tickets/${ticketId}/start_checklist`, "POST", { day_id: day.id, actor: session.name });
+    } catch (e) {
+      blockedReason = e.message || `This checklist opens on ${day.date} — come back on the day.`;
+    }
+  }
+  renderCurrent();
+}
+
+init();
+</script>
+</body>
+</html>

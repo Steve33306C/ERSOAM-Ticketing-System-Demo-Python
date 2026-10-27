@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["technician", "engineer"]);
+const homePage = session.role === "engineer" ? "dashboard-engineer.html" : "dashboard-technician.html";
+// Technicians (and engineers on a phone) get the phone layout; an engineer on a laptop gets the desktop layout.
+const desktopView = session.role === "engineer" && !window.matchMedia("(max-width: 768px)").matches;
+if (desktopView) {
+  renderShell({ active: "dashboard", role: session.role, session, pageTitle: "Job Details", pageSubtitle: "Site details, safety checklist and report for this visit." });
+} else {
+  renderMobileShell({ pageTitle: "Job Details", session, active: homePage });
+}
+
+const ticketId = getQueryParam("id");
+// Skeleton shape while the first render() is still waiting on the API —
+// render() below overwrites #root entirely with the real detail shell
+// exactly as before, this is only the initial placeholder.
+document.getElementById("pageContent").innerHTML = `<div id="root"${desktopView ? ` style="max-width:760px;"` : ""}>${skeletonCards(2)}</div>`;
+
+let allCalendarEvents = [];
+
+function dayStatusBadge(day) {
+  if (day.status === "submitted") return `<span class="badge badge-approved">Submitted</span>`;
+  if (day.status === "unfinished") return `<span class="badge badge-stale">Unfinished</span>`;
+  return `<span class="badge badge-open">Pending</span>`;
+}
+
+function timeInfoForDay(day) {
+  const event = allCalendarEvents.find(e => e.id === day.source_event_id);
+  if (!event) return { time: "Time TBC", date: day.date };
+  if (event.all_day) return { time: "All-day", date: day.date };
+  const start = event.time || "Time TBC";
+  const end = event.end_time && event.end_time !== event.time ? ` – ${event.end_time}` : "";
+  return { time: start + end, date: day.date };
+}
+
+function telLink(phone) {
+  const digits = (phone || "").replace(/[^0-9+]/g, "");
+  return digits ? `tel:${digits}` : null;
+}
+function waLink(phone) {
+  const digits = (phone || "").replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  const withCountry = digits.startsWith("0") ? "6" + digits : digits;
+  return `https://wa.me/${withCountry}`;
+}
+
+// Prefer a full street address; fall back to whatever location fields the
+// client record does have (city/state/postcode) rather than showing nothing —
+// a lot of client records only have partial location info on file.
+function bestLocationText(client) {
+  if (!client) return "";
+  if (client.address) return client.address;
+  return [client.city, client.state, client.postcode].filter(Boolean).join(", ");
+}
+
+function dayRow(t, day, accountsByName) {
+  const info = timeInfoForDay(day);
+  const teamLabel = teamLabelForTechnicians(day.technicians, accountsByName);
+  const isMine = (day.technicians || []).includes(session.name) || session.role === "engineer";
+  const dateLabel = info.date === todayYmd() ? "Today" : info.date;
+  const metaBits = [dateLabel, teamLabel].filter(Boolean).join(" · ");
+  // A pending reschedule means this visit isn't proceeding as scheduled — so
+  // the card is no longer tappable at all (no onclick) while it's pending,
+  // with the pale-red fill + notice explaining why. Server still blocks
+  // submit_checklist too, in case anyone reaches checklist.html another way
+  // (e.g. a stale tab already open on that page).
+  const rescheduling = !!t.reschedule_requested;
+  return `<div class="job-card-rich"${rescheduling ? ` style="background:#fef2f2;border-color:#fecaca;cursor:default;"` : ` onclick="location.href='checklist.html?id=${t.id}&day=${day.id}'"`}>
+    <div class="job-card-rich-icon job-type-icon-default">${icon("clipboard")}</div>
+    <div class="job-card-rich-body">
+      <div class="job-card-rich-top">
+        ${dayStatusBadge(day)}
+        <span class="job-card-rich-meta">${metaBits}</span>
+        ${rescheduling ? `<span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#b91c1c;">Waiting reschedule from CS</span>` : ""}
+      </div>
+      <div class="job-card-title" style="font-size:16px;">Safety Checklist</div>
+      <div class="list-card-meta">${info.time}</div>
+      <div class="list-card-meta">Technicians: ${(day.technicians || []).join(", ") || "none (engineer only)"}${isMine ? "" : " (not you)"}</div>
+    </div>
+  </div>`;
+}
+
+function lockedDayRow(day) {
+  const dateLabel = day.date === todayYmd() ? "Today" : day.date;
+  return `<div class="job-card-rich" style="opacity:0.45;">
+    <div class="job-card-rich-icon job-type-icon-default">${icon("lock")}</div>
+    <div class="job-card-rich-body">
+      <div class="job-card-rich-top">
+        <span class="badge badge-open" style="opacity:0.7;">Upcoming</span>
+        <span class="job-card-rich-meta">${dateLabel}</span>
+      </div>
+      <div class="job-card-title" style="font-size:16px;">Safety Checklist</div>
+      <div class="list-card-meta">Complete today's checklist first</div>
+    </div>
+  </div>`;
+}
+
+// Item 15 (Fasa 3): quick-select reasons instead of a free-text prompt() —
+// backend "reason" is still plain text, this only changes how it's entered.
+function doReschedule(ticketId) {
+  const existing = document.getElementById("rescheduleOverlay");
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="rescheduleOverlay" class="modal-overlay">
+      <div class="modal-dialog">
+        <h2><span>Request Reschedule</span><button class="modal-close" onclick="document.getElementById('rescheduleOverlay').remove()">&times;</button></h2>
+        <label>Reason for reschedule</label>
+        <div class="reason-options">
+          <label><input type="radio" name="rescheduleReason" value="Technician sick" onchange="toggleRescheduleOther(false)"> Technician sick</label>
+          <label><input type="radio" name="rescheduleReason" value="Site not accessible" onchange="toggleRescheduleOther(false)"> Site not accessible</label>
+          <label><input type="radio" name="rescheduleReason" value="Weather" onchange="toggleRescheduleOther(false)"> Weather</label>
+          <label><input type="radio" name="rescheduleReason" value="Client requested a date change" onchange="toggleRescheduleOther(false)"> Client requested a date change</label>
+          <label><input type="radio" name="rescheduleReason" value="__other__" onchange="toggleRescheduleOther(true)"> Other</label>
+        </div>
+        <input id="rescheduleOtherInput" type="text" placeholder="Specify the reason..." style="display:none;margin-top:8px;">
+        <button class="mobile-btn mobile-btn-primary" style="margin-top:10px;" onclick="submitReschedule('${ticketId}')">Confirm</button>
+      </div>
+    </div>
+  `);
+}
+
+function toggleRescheduleOther(show) {
+  const el = document.getElementById("rescheduleOtherInput");
+  if (!el) return;
+  el.style.display = show ? "" : "none";
+  if (show) el.focus();
+}
+
+function submitReschedule(ticketId) {
+  const selected = document.querySelector('input[name="rescheduleReason"]:checked');
+  if (!selected) { showToast("Please choose a reason for the reschedule."); return; }
+  let reason = selected.value;
+  if (reason === "__other__") {
+    reason = (document.getElementById("rescheduleOtherInput").value || "").trim();
+    if (!reason) { showToast("Please specify the reason for the reschedule."); return; }
+  }
+  document.getElementById("rescheduleOverlay").remove();
+  doAction(ticketId, "reschedule", { actor: session.name, reason }, () => render(), (msg) => showToast(msg));
+}
+
+async function render() {
+  let t, accountsByName, client;
+  try {
+    const [ticket, accountsRes, clientsRes, eventsRes] = await Promise.all([
+      api(`/api/tickets/${ticketId}`), api("/api/accounts"), api("/api/clients"), api("/api/calendar_events"),
+    ]);
+    t = ticket;
+    accountsByName = Object.fromEntries(accountsRes.accounts.map(a => [a.name, a]));
+    allCalendarEvents = eventsRes.calendar_events;
+    client = clientsRes.clients.find(c => c.name.trim().toLowerCase() === t.client.trim().toLowerCase());
+  } catch (e) {
+    document.getElementById("root").innerHTML = `<div class="empty">Job not found.</div>`;
+    return;
+  }
+
+  if (!isMyTeamTicket(t, session, accountsByName)) {
+    document.getElementById("root").innerHTML = `<div class="empty">This job isn't assigned to your team.</div>`;
+    return;
+  }
+
+  const days = (t.visit_days || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  const heroDay = todaysVisitDay(t) || nextUpcomingVisitDay(t) || days[0] || null;
+  const heroTime = heroDay ? timeInfoForDay(heroDay) : null;
+  const heroMeta = heroDay ? [heroDay.date === todayYmd() ? "Today" : heroDay.date, teamLabelForTechnicians(heroDay.technicians, accountsByName)].filter(Boolean).join(" · ") : "";
+
+  const locationText = bestLocationText(client);
+  const addressHtml = locationText
+    ? `<div class="detail-hero-address">${icon("pin")} ${locationText}</div>
+       <a class="detail-maps-btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationText + " " + t.client)}" target="_blank" rel="noopener">Open in Google Maps</a>`
+    : `<div class="detail-address-missing">Address not on file for this client.</div>`;
+
+  const remarks = (t.additional && t.additional.client_remarks) || "";
+  const remarksHtml = remarks
+    ? `<div class="detail-section-label">Special Remarks</div>
+       <div class="detail-remarks-box"><span>${remarks}</span></div>`
+    : "";
+
+  const picName = client && client.contact_person ? client.contact_person : "";
+  const picPhone = client && client.phone ? client.phone : "";
+  const tel = telLink(picPhone);
+  const wa = waLink(picPhone);
+  const picHtml = (picName || picPhone)
+    ? `<div class="detail-section-label">Site PIC / Client Contact</div>
+       <div class="detail-pic-card">
+         <div>
+           <div class="detail-pic-name">${picName || t.client}</div>
+           <div class="detail-pic-phone">${picPhone || "No phone on file"}</div>
+         </div>
+         <div class="detail-pic-actions">
+           ${tel ? `<a href="${tel}">${icon("phone")} Call</a>` : ""}
+           ${wa ? `<a href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ""}
+         </div>
+       </div>`
+    : "";
+
+  const daysList = t.visit_days || [];
+  const pendingDays = daysList.filter(d => !["submitted", "unfinished"].includes(d.status));
+  const checklistDone = daysList.length > 0 && pendingDays.length === 0;
+
+  let reportBtn = "";
+  if (t.state !== "created") {
+    if (t.report && t.report.status !== "draft") {
+      reportBtn = `<button class="mobile-btn mobile-btn-secondary" onclick="location.href='report.html?id=${t.id}'">View Report</button>`;
+    } else if (checklistDone) {
+      reportBtn = `<button class="mobile-btn mobile-btn-secondary" onclick="location.href='report.html?id=${t.id}'">Draft Report</button>`;
+    } else {
+      reportBtn = `<button class="mobile-btn mobile-btn-secondary" disabled style="opacity:0.5;">Draft Report</button>
+        <p class="small" style="text-align:center;color:#b91c1c;margin-top:-6px;">Complete the safety checklist before drafting the report.</p>`;
+    }
+  }
+
+    const rescheduleBtn = (t.state !== "created" && t.state !== "closed" && !t.reschedule_requested)
+    ? `<button class="mobile-btn mobile-btn-secondary" style="border-color:#b91c1c;color:#b91c1c;" onclick="doReschedule('${t.id}')">Request Reschedule</button>`
+    : (t.reschedule_requested
+        ? `<div class="empty" style="font-size:13px;color:#b91c1c;text-align:center;padding:8px 0;">Reschedule requested — waiting for CS.</div>`
+        : "");
+
+    const rescheduleLink = (t.state !== "created" && t.state !== "closed")
+    ? (t.reschedule_requested
+        ? `<span style="font-size:11.5px;color:#b91c1c;font-weight:700;">Reschedule Requested</span>`
+        : `<span style="font-size:11.5px;color:#b91c1c;font-weight:700;text-decoration:underline;cursor:pointer;" onclick="doReschedule('${t.id}')">Reschedule</span>`)
+    : "";
+
+      const activeDay = days.find(d => d.status === "pending");
+      const daysHtml = days.length
+        ? days.map(d => (d.status !== "pending" || (activeDay && d.id === activeDay.id))
+            ? dayRow(t, d, accountsByName)
+            : lockedDayRow(d)
+          ).join("")
+        : emptyState("No visit days scheduled yet.", "calendar", "font-size:15px;");
+
+  document.getElementById("root").innerHTML = `
+    <a class="back-link" href="${homePage}">&larr; Back to Dashboard</a>
+    <div class="detail-hero-card">
+      <div class="job-card-rich-top" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+        <div>
+          ${heroDay ? dayStatusBadge(heroDay) : ""}
+          <span class="job-card-rich-meta">${heroMeta}</span>
+        </div>
+        ${rescheduleLink}
+      </div>
+      <div class="detail-hero-title">${t.title}</div>
+      <div class="detail-hero-client">${t.client}</div>
+      ${addressHtml}
+
+      ${heroDay ? `
+        <div class="detail-time-card">
+          <div class="detail-time-label">Scheduled Time</div>
+          <div class="detail-time-value">${heroTime.time}</div>
+          <div class="detail-time-date">${heroTime.date === todayYmd() ? "Today" : heroTime.date}</div>
+        </div>
+      ` : emptyState("Not yet scheduled.", "calendar", "padding:10px 0;")}
+
+      <div class="detail-section-label">Scope of Work</div>
+      <div class="detail-body-box">${t.description}</div>
+
+      ${remarksHtml}
+      ${picHtml}
+    </div>
+
+    <h3 style="margin:18px 4px 10px;">Safety Checklists</h3>
+    ${daysHtml}
+    ${reportBtn}
+  `;
+}
+render();
+setInterval(render, 6000);
+</script>
+</body>
+</html>

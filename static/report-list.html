@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("technician");
+renderMobileShell({ pageTitle: "Reports", session });
+document.getElementById("pageContent").innerHTML = `
+  <input id="reportSearch" type="text" placeholder="Search by client or report number…" style="margin-bottom:14px;">
+  <div id="list"></div>
+`;
+document.getElementById("reportSearch").addEventListener("input", render);
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #list with the real cards exactly as
+// before.
+document.getElementById("list").innerHTML = skeletonCards(2);
+
+// Same 4-way split the desktop Reports tab uses (draft/submitted/approved/
+// rejected), so a technician can tell "rejected, needs fixing" apart from
+// "just not submitted yet" — the old version lumped both into "In progress".
+function reportStatusInfo(t) {
+  const r = t.report;
+  if (r && r.status === "approved") return { label: "Approved", cls: "job-flag-done" };
+  if (r && r.status === "submitted") return { label: "Submitted", cls: "job-flag-done" };
+  if (r && (r.report_rejections || []).length > 0) return { label: "Rejected — needs revision", cls: "job-flag-alert" };
+  return { label: "In progress", cls: "job-flag-progress" };
+}
+
+function row(t) {
+  const s = reportStatusInfo(t);
+  const reportNo = t.report ? t.report.id : "—";
+  return `<div class="job-card-rich" onclick="location.href='report.html?id=${t.id}'">
+    <div class="job-card-rich-icon job-type-icon-default">${icon("document")}</div>
+    <div class="job-card-rich-body">
+      <div class="job-card-rich-top">
+        <span class="job-card-rich-meta">${reportNo}</span>
+      </div>
+      <div class="job-card-title" style="font-size:16px;">${t.client}</div>
+      <div class="list-card-meta">${TYPE_LABELS[t.type] || t.type} · ${t.engineer_date || "—"}</div>
+      <div class="job-flags"><span class="job-flag ${s.cls}">${s.label}</span></div>
+    </div>
+  </div>`;
+}
+
+async function render() {
+  // Fasa 8 audit (5 Okt) — same "stuck Loading…" bug class as B3
+  // (checklist.html): no try/catch around the initial API calls, so a
+  // failed first load left the skeleton cards showing forever with no
+  // explanation, only self-healing on the next successful poll (6s later).
+  let tickets, accounts;
+  try {
+    const results = await Promise.all([api("/api/tickets"), api("/api/accounts")]);
+    tickets = results[0].tickets;
+    accounts = results[1].accounts;
+  } catch (e) {
+    document.getElementById("list").innerHTML = `<div class="empty">Couldn't load reports — ${e.message || "retrying…"}</div>`;
+    return;
+  }
+  const accountsByName = Object.fromEntries(accounts.map(a => [a.name, a]));
+  let withReport = tickets.filter(t => t.state !== "created" && isMyTeamTicket(t, session, accountsByName));
+
+  const q = document.getElementById("reportSearch").value.trim().toLowerCase();
+  if (q) {
+    withReport = withReport.filter(t =>
+      t.client.toLowerCase().includes(q) ||
+      (t.report && t.report.id.toLowerCase().includes(q))
+    );
+  }
+
+  const list = document.getElementById("list");
+  list.innerHTML = withReport.length
+    ? withReport.map(row).join("")
+    : emptyState("No reports match.", "document", "font-size:16px;padding:40px 0;");
+}
+render();
+setInterval(() => {
+  const active = document.activeElement;
+  if (active && active.id === "reportSearch") return;
+  render();
+}, 6000);
+</script>
+</body>
+</html>

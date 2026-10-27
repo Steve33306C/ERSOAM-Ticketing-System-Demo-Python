@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tools — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Technician is deliberately excluded — Tools is Engineer/Admin/CS only.
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "tools", role: session.role, session,
+  pageTitle: "Tools", pageSubtitle: "Quick utilities for site planning and sizing — each opens in a new tab.",
+});
+
+// Each tool is hosted on its own external site (not part of this portal),
+// so every card just links out in a new tab rather than trying to embed it —
+// an iframe would silently break if the external site blocks framing, and
+// we don't control that site's headers.
+const TOOLS = [
+  {
+    icon: "&#128268;", // 🔌
+    name: "Panel-Inverter Compatibility Tool",
+    description: "Can check which inverter and panel that compatible to the client solar system.",
+    url: "https://script.google.com/a/macros/ers.my/s/AKfycbxpW2301U52HSf0kY2mkdyRO33WBrBVHyOG19if9v8iXBh9hUDmN9qgX9Csyw15SOc/exec",
+  },
+  {
+    icon: "&#9728;&#65039;", // ☀️
+    name: "PSH Calculator",
+    description: "To calculate yearly/monthly PSH for client solar system.",
+    url: "https://psh-calculator-ers.netlify.app/",
+  },
+];
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="tools-grid">
+    ${TOOLS.map(t => `
+      <div class="card tool-card">
+        <div class="tool-card-icon">${t.icon}</div>
+        <h3>${t.name}</h3>
+        <p>${t.description}</p>
+        <a class="tool-card-link" href="${t.url}" target="_blank" rel="noopener noreferrer">Open Tool &rarr;</a>
+      </div>
+    `).join("")}
+  </div>
+`;
+</script>
+</body>
+</html>

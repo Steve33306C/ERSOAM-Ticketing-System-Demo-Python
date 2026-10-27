@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard — Engineer — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("engineer");
+renderShell({
+  active: "dashboard", role: "engineer", session,
+  pageTitle: "Dashboard", pageSubtitle: "What needs your attention as an engineer, right now.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="stat-grid dashboard-sticky-stats">
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-schedule')"><div class="stat-icon">${icon("calendar")}</div><div><div class="stat-num" id="stat-schedule">—</div><div class="stat-label">WAITING TO BE SCHEDULED</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-review')"><div class="stat-icon">${icon("document")}</div><div><div class="stat-num" id="stat-review">—</div><div class="stat-label">REPORTS AWAITING REVIEW</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-upcoming')"><div class="stat-icon">${icon("wrench")}</div><div><div class="stat-num" id="stat-upcoming">—</div><div class="stat-label">UPCOMING VISITS</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-solo')"><div class="stat-icon">${icon("clipboard")}</div><div><div class="stat-num" id="stat-solo">—</div><div class="stat-label">YOUR SOLO SITE VISITS</div></div></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-schedule">
+    <h2>Waiting to be scheduled</h2>
+    <div id="scheduleList"></div>
+  </div>
+  <div class="card dashboard-section" id="section-solo">
+    <h2>Your solo site visits</h2>
+    <p class="small">Visits where you go to site without a technician. You fill in the safety checklist yourself, then the report.</p>
+    <div id="soloList"></div>
+  </div>
+  <div class="card dashboard-section" id="section-review">
+    <h2>Reports awaiting your review</h2>
+    <div id="reviewList"></div>
+  </div>
+  <div class="card dashboard-section" id="section-upcoming">
+    <h2>Upcoming visits</h2>
+    <div id="upcomingList"></div>
+  </div>
+`;
+
+// Skeleton placeholders while the first render() is still waiting on the
+// API — render() below overwrites these same containers with real content
+// exactly as before.
+["scheduleList", "soloList", "reviewList", "upcomingList"].forEach(id => {
+  document.getElementById(id).innerHTML = skeletonRows(2);
+});
+
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function ticketRow(t, note, sla) {
+  return `<div class="attention-item" style="cursor:pointer;" onclick="location.href='ticket-detail.html?id=${t.id}'">
+    <div>
+      <div class="t-title">${t.id} — ${t.title}</div>
+      <div class="t-meta">${t.client} · ${TYPE_LABELS[t.type] || t.type}</div>
+    </div>
+    <div style="text-align:right;">
+      <span class="badge badge-progress">${STATE_LABELS[t.state] || t.state}</span>
+      ${sla ? `<div class="t-meta" style="color:${sla.color};font-weight:700;">${sla.label}</div>` : ""}
+      ${note ? `<div class="t-meta">${note}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+async function render() {
+  // Fasa 8 audit (5 Okt) — same "stuck Loading…" bug class as B3
+  // (checklist.html): no try/catch around the initial API call, so a
+  // failed first load left the skeleton rows showing forever with no
+  // explanation, only self-healing on the next successful poll (4s later).
+  let tickets;
+  try {
+    tickets = (await api("/api/tickets")).tickets;
+  } catch (e) {
+    const msg = `<div class="empty">Couldn't load — ${e.message || "retrying…"}</div>`;
+    ["scheduleList", "soloList", "reviewList", "upcomingList"].forEach(id => { document.getElementById(id).innerHTML = msg; });
+    return;
+  }
+  const mine = tickets.filter(t => t.assignees.includes(session.name));
+  const needScheduling = mine.filter(t => t.state === "created");
+  const needReview = mine.filter(t => t.state === "engineer_review");
+  const upcoming = mine.filter(t => t.state === "scheduled").sort((a, b) => (a.engineer_date || "").localeCompare(b.engineer_date || ""));
+
+  // Engineer-only visit days (no technicians, I am the engineer) that still need a checklist.
+  const soloDays = [];
+  tickets.forEach(t => {
+    if (t.state === "closed") return;
+    (t.visit_days || []).forEach(day => {
+      if (day.engineer === session.name && (day.technicians || []).length === 0 && day.status !== "submitted") soloDays.push({ t, day });
+    });
+  });
+  soloDays.sort((a, b) => a.day.date.localeCompare(b.day.date));
+
+  document.getElementById("stat-solo").textContent = soloDays.length;
+  document.getElementById("soloList").innerHTML = soloDays.length
+    ? soloDays.map(({ t, day }) => `<div class="attention-item" style="cursor:pointer;" onclick="location.href='job-detail.html?id=${t.id}'">
+        <div><div class="t-title">${t.client}</div><div class="t-meta">${t.id} · ${TYPE_LABELS[t.type] || t.type}</div></div>
+        <div style="text-align:right;"><span class="badge badge-progress">${day.date === todayYmd() ? "Today" : day.date}</span>
+        <div class="t-meta">View details &rarr;</div></div></div>`).join("")
+    : emptyState("No solo site visits scheduled.", "clipboard");
+
+  document.getElementById("stat-schedule").textContent = needScheduling.length;
+  document.getElementById("stat-review").textContent = needReview.length;
+  document.getElementById("stat-upcoming").textContent = upcoming.length;
+
+  document.getElementById("scheduleList").innerHTML = needScheduling.length
+    ? needScheduling.map(t => ticketRow(t)).join("") : emptyState("Nothing waiting to be scheduled.", "calendar");
+  document.getElementById("reviewList").innerHTML = needReview.length
+    ? needReview.map(t => ticketRow(t, null, slaInfo(t.report.submitted_at, 3))).join("") : emptyState("No reports waiting on your review.", "document");
+  document.getElementById("upcomingList").innerHTML = upcoming.length
+    ? upcoming.map(t => ticketRow(t, `Scheduled: ${t.engineer_date}`)).join("") : emptyState("No upcoming visits scheduled.", "calendar");
+}
+render();
+setInterval(render, 4000);
+</script>
+</body>
+</html>

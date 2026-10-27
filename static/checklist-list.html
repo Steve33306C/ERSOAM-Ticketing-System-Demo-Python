@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety Checklists — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("technician");
+renderMobileShell({ pageTitle: "Safety Checklists", session });
+// Skeleton shape while the first render() is still waiting on the API —
+// render() below overwrites #list with the real content exactly as before,
+// this is only the initial placeholder.
+document.getElementById("pageContent").innerHTML = `<div id="list">${skeletonCards(2)}</div>`;
+
+// Item 14 (Fasa 3): same card look as dashboard-technician.html/job-detail.html
+// (.job-card-rich) instead of this page's own .ck-row — one visual language
+// across the mobile views. Status colors are unchanged, just reusing the
+// shared .job-flag-* badge classes instead of an inline --ck-accent color.
+const TYPE_ICON = {
+  site_survey: icon("compass"),
+  servicing: icon("wrench"),
+  troubleshooting: icon("lightning"),
+  dere: icon("sun"),
+  // Newer ticket types (Ticket Type Expansion, 2 Okt) — reuse the closest
+  // existing icon rather than inventing a new one per type.
+  residential_servicing: icon("wrench"),
+  ci_servicing: icon("wrench"),
+  residential_troubleshooting: icon("lightning"),
+  ci_troubleshooting: icon("lightning"),
+  ntp_phase_1: icon("document"),
+  ntp_phase_2: icon("document"),
+  ntp_phase_3: icon("document"),
+  ntp_phase_4: icon("document"),
+};
+const TYPE_ICON_CLASS = {
+  site_survey: "job-type-icon-survey",
+  servicing: "job-type-icon-servicing",
+  troubleshooting: "job-type-icon-troubleshooting",
+  dere: "job-type-icon-dere",
+  residential_servicing: "job-type-icon-servicing",
+  ci_servicing: "job-type-icon-servicing",
+  residential_troubleshooting: "job-type-icon-troubleshooting",
+  ci_troubleshooting: "job-type-icon-troubleshooting",
+  ntp_phase_1: "job-type-icon-default",
+  ntp_phase_2: "job-type-icon-default",
+  ntp_phase_3: "job-type-icon-default",
+  ntp_phase_4: "job-type-icon-default",
+};
+
+function ckStatusFlag(day) {
+  const cls = day.status === "submitted" ? "job-flag-done"
+    : day.status === "unfinished" ? "job-flag-alert"
+    : (day.checklist && day.checklist.checklist_started_at) ? "job-flag-progress"
+    : "job-flag-notstarted";
+  return `<span class="job-flag ${cls}">${dayStatusLabel(day)}</span>`;
+}
+
+function ckCard(t, day, nested) {
+  const iconCls = TYPE_ICON_CLASS[t.type] || "job-type-icon-default";
+  const iconSvg = TYPE_ICON[t.type] || icon("wrench");
+  return `<div class="job-card-rich${nested ? " job-card-rich-nested" : ""}" onclick="location.href='checklist.html?id=${t.id}&day=${day.id}'">
+    ${nested ? "" : `<div class="job-card-rich-icon ${iconCls}">${iconSvg}</div>`}
+    <div class="job-card-rich-body">
+      ${nested ? "" : `<div class="job-card-title" style="font-size:16px;">${t.client}</div>`}
+      <div class="list-card-meta">${nested ? "" : (TYPE_LABELS[t.type] || t.type) + " · "}${day.date} · Technicians: ${(day.technicians || []).join(", ") || "—"}</div>
+      <div class="job-flags">${ckStatusFlag(day)}</div>
+    </div>
+  </div>`;
+}
+
+async function render() {
+  // Fasa 6 audit (3 Okt) — same "stuck Loading…" bug class already fixed in
+  // checklist.html: already retries every 4s below, but a failed call was an
+  // uncaught rejection with no message shown — now it shows a clear message
+  // on failure instead of hanging silently; the 4s retry still self-heals.
+  let tickets, accounts;
+  try {
+    const results = await Promise.all([api("/api/tickets"), api("/api/accounts")]);
+    tickets = results[0].tickets;
+    accounts = results[1].accounts;
+  } catch (e) {
+    document.getElementById("list").innerHTML = `<div class="empty">Couldn't load checklists — ${e.message || "retrying…"}</div>`;
+    return;
+  }
+  const accountsByName = Object.fromEntries(accounts.map(a => [a.name, a]));
+  const groups = [];
+  tickets.forEach(t => {
+    const myDays = (t.visit_days || []).filter(day => isMyTeamDay(day, session, accountsByName));
+    if (myDays.length) groups.push({ t, days: myDays.slice().sort((a, b) => b.date.localeCompare(a.date)) });
+  });
+  groups.sort((a, b) => b.days[0].date.localeCompare(a.days[0].date));
+
+  const list = document.getElementById("list");
+  list.innerHTML = groups.length
+    ? groups.map(({ t, days }) => {
+        if (days.length === 1) return ckCard(t, days[0], false);
+        const range = `${days[days.length - 1].date} – ${days[0].date}`;
+        return `<div class="ck-group">
+          <div class="ck-group-header">
+            <div class="ck-group-title">${t.client}</div>
+            <div class="ck-group-meta">${TYPE_LABELS[t.type] || t.type} · ${days.length} days · ${range}</div>
+          </div>
+          <div class="ck-group-days">${days.map(day => ckCard(t, day, true)).join("")}</div>
+        </div>`;
+      }).join("")
+    : emptyState("No safety checklists yet.", "shield", "font-size:16px;padding:40px 0;");
+}
+render();
+setInterval(render, 4000);
+</script>
+</body>
+</html>

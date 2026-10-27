@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Reports — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "reports", role: session.role, session,
+  pageTitle: "Reports", pageSubtitle: "Every report across all ticket types.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <input id="reportSearch" type="text" placeholder="Search by client, report #, or engineer…" style="margin-bottom:14px;">
+
+  <div class="stat-grid">
+    <div class="stat-card" id="statcard-draft" style="cursor:pointer;" onclick="setStatusFilter('draft')"><div class="stat-icon">${icon("pencil")}</div><div><div class="stat-num" id="stat-draft">—</div><div class="stat-label">DRAFT</div></div></div>
+    <div class="stat-card" id="statcard-submitted" style="cursor:pointer;" onclick="setStatusFilter('submitted')"><div class="stat-icon">${icon("upload")}</div><div><div class="stat-num" id="stat-submitted">—</div><div class="stat-label">SUBMITTED</div></div></div>
+    <div class="stat-card" id="statcard-approved" style="cursor:pointer;" onclick="setStatusFilter('approved')"><div class="stat-icon">${icon("check")}</div><div><div class="stat-num" id="stat-approved">—</div><div class="stat-label">APPROVED</div></div></div>
+    <div class="stat-card" id="statcard-rejected" style="cursor:pointer;border-color:#b91c1c;" onclick="setStatusFilter('rejected')"><div class="stat-icon">${icon("warning")}</div><div><div class="stat-num" id="stat-rejected" style="color:#b91c1c;">—</div><div class="stat-label" style="color:#b91c1c;">REJECTED</div></div></div>
+  </div>
+  <div id="statusFilterNote" class="small" style="display:none;margin:8px 2px 0;">
+    Showing <b id="statusFilterLabel"></b> reports only — <a onclick="setStatusFilter(null)" style="cursor:pointer;">clear filter</a>
+  </div>
+
+  <div class="tabs" id="typeTabs" style="margin:14px 0;">
+    <button class="tab active" data-type="all" onclick="setTypeFilter('all')">All Reports</button>
+    <button class="tab" data-type="site_survey" onclick="setTypeFilter('site_survey')">Site Survey</button>
+    <button class="tab" data-type="servicing" onclick="setTypeFilter('servicing')">Servicing</button>
+    <button class="tab" data-type="troubleshooting" onclick="setTypeFilter('troubleshooting')">Troubleshooting</button>
+    <button class="tab" data-type="dere" onclick="setTypeFilter('dere')">DERE</button>
+    <button class="tab" data-type="ntp" onclick="setTypeFilter('ntp')">NTP</button>
+  </div>
+
+  <div class="card">
+    <div id="list"></div>
+  </div>
+`;
+document.getElementById("reportSearch").addEventListener("input", render);
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #list with the real table exactly as
+// before.
+document.getElementById("list").innerHTML = skeletonRows(3);
+
+const TYPE_FILTER_GROUPS = {
+  site_survey: ["site_survey"],
+  servicing: ["servicing", "residential_servicing", "ci_servicing"],
+  troubleshooting: ["troubleshooting", "residential_troubleshooting", "ci_troubleshooting"],
+  dere: ["dere"],
+  ntp: ["ntp_phase_1", "ntp_phase_2", "ntp_phase_3", "ntp_phase_4"],
+};
+let _reportTypeFilter = "all";
+function setTypeFilter(type) {
+  _reportTypeFilter = type;
+  document.querySelectorAll("#typeTabs .tab").forEach(el => el.classList.toggle("active", el.dataset.type === type));
+  render();
+}
+
+// draft | submitted | approved | rejected | null (no filter). Clicking the
+// same stat card again (or the "clear filter" link) clears it back to null.
+let _reportStatusFilter = null;
+const STATUS_FILTER_LABELS = { draft: "Draft", submitted: "Submitted", approved: "Approved", rejected: "Rejected" };
+function setStatusFilter(status) {
+  _reportStatusFilter = _reportStatusFilter === status ? null : status;
+  render();
+}
+
+let _reportSort = { key: "date", dir: "desc" };
+function setReportSort(key) {
+  if (_reportSort.key === key) {
+    _reportSort.dir = _reportSort.dir === "asc" ? "desc" : "asc";
+  } else {
+    _reportSort = { key, dir: "desc" };
+  }
+  render();
+}
+function reportSortArrow(key) {
+  if (_reportSort.key !== key) return `<span style="opacity:0.35;">&#8597;</span>`;
+  return _reportSort.dir === "asc" ? `<span style="color:var(--accent);">&#8593;</span>` : `<span style="color:var(--accent);">&#8595;</span>`;
+}
+
+// Single source of truth for which of the 4 stat-card buckets a report falls
+// into — used by the badge, the sort rank, AND the stat-card click filter,
+// so all three always agree on what counts as "Rejected" vs "Draft".
+function reportStatusCategory(t) {
+  const r = t.report;
+  if (r.status === "approved") return "approved";
+  if (r.status === "submitted") return "submitted";
+  if ((r.report_rejections || []).length > 0) return "rejected";
+  return "draft";
+}
+
+function reportStatusBadge(t) {
+  const cat = reportStatusCategory(t);
+  if (cat === "approved") return `<span class="badge badge-approved">Approved</span>`;
+  if (cat === "submitted") return `<span class="badge badge-progress">Submitted</span>`;
+  if (cat === "rejected") return `<span class="badge badge-stale">Rejected</span>`;
+  return `<span class="badge badge-open">Draft</span>`;
+}
+
+function reportStatusRank(t) {
+  const cat = reportStatusCategory(t);
+  return { draft: 0, submitted: 1, approved: 2, rejected: 3 }[cat];
+}
+
+function engineerForTicket(t, accountsByName) {
+  const eng = (t.assignees || []).find(name => accountsByName[name] && accountsByName[name].role === "engineer");
+  return eng ? eng.replace(/^[A-Za-z]+ - /, "") : "—";
+}
+
+function reportRow(t, accountsByName) {
+  const r = t.report;
+  return `
+    <tr onclick="location.href='ticket-detail.html?id=${t.id}'">
+      <td class="rp-id"><div style="font-weight:800;color:var(--accent);font-size:13px;">${r.id}</div></td>
+      <td class="rp-type"><span class="badge badge-type">${TYPE_LABELS[t.type] || t.type}</span></td>
+      <td class="rp-client">${t.client}</td>
+      <td class="rp-ticket"><span class="badge" style="background:var(--accent-soft);color:var(--accent);">${t.id}</span></td>
+      <td class="rp-eng">${engineerForTicket(t, accountsByName)}</td>
+      <td class="rp-status">${reportStatusBadge(t)}</td>
+      <td class="table-updated rp-date">${fmtTime(r.created_at)}</td>
+    </tr>
+  `;
+}
+
+async function render() {
+  // Fasa 8 audit (5 Okt) — same "stuck Loading…" bug class as B3
+  // (checklist.html): no try/catch around the initial API calls, so a
+  // failed first load left the skeleton rows showing forever with no
+  // explanation, only self-healing on the next successful poll (4s later).
+  let tickets, accounts;
+  try {
+    const results = await Promise.all([api("/api/tickets"), api("/api/accounts")]);
+    tickets = results[0].tickets;
+    accounts = results[1].accounts;
+  } catch (e) {
+    document.getElementById("list").innerHTML = `<div class="empty">Couldn't load reports — ${e.message || "retrying…"}</div>`;
+    return;
+  }
+  const accountsByName = Object.fromEntries(accounts.map(a => [a.name, a]));
+  let withReport = tickets.filter(t => t.state !== "created");
+
+  // Stat-card counts always reflect the department-wide total (not affected by
+  // the type tab, search box, or the status filter below) — they're the
+  // reference numbers you click on, so they shouldn't shift once you've
+  // clicked one.
+  document.getElementById("stat-draft").textContent = withReport.filter(t => reportStatusCategory(t) === "draft").length;
+  document.getElementById("stat-submitted").textContent = withReport.filter(t => reportStatusCategory(t) === "submitted").length;
+  document.getElementById("stat-approved").textContent = withReport.filter(t => reportStatusCategory(t) === "approved").length;
+  document.getElementById("stat-rejected").textContent = withReport.filter(t => reportStatusCategory(t) === "rejected").length;
+
+  // Highlight whichever stat card is the active filter (if any).
+  ["draft", "submitted", "approved", "rejected"].forEach(status => {
+    const card = document.getElementById(`statcard-${status}`);
+    const isActive = _reportStatusFilter === status;
+    card.style.boxShadow = isActive ? "0 0 0 2px var(--accent) inset" : "";
+    card.style.background = isActive ? "var(--accent-soft)" : "";
+  });
+  document.getElementById("statusFilterNote").style.display = _reportStatusFilter ? "block" : "none";
+  if (_reportStatusFilter) document.getElementById("statusFilterLabel").textContent = STATUS_FILTER_LABELS[_reportStatusFilter];
+
+  if (_reportStatusFilter) withReport = withReport.filter(t => reportStatusCategory(t) === _reportStatusFilter);
+
+  // Each tab now covers both the legacy type key AND its newer
+  // residential/C&I equivalents (Ticket Type Expansion, 2 Okt) — e.g.
+  // clicking "Servicing" matches old "servicing" tickets AND new
+  // "residential_servicing"/"ci_servicing" ones, instead of only the
+  // legacy key (which no new ticket uses, so the tab used to show nothing).
+  if (_reportTypeFilter !== "all") {
+    const group = TYPE_FILTER_GROUPS[_reportTypeFilter] || [_reportTypeFilter];
+    withReport = withReport.filter(t => group.includes(t.type));
+  }
+
+  const q = document.getElementById("reportSearch").value.trim().toLowerCase();
+  if (q) {
+    withReport = withReport.filter(t =>
+      t.client.toLowerCase().includes(q) ||
+      t.report.id.toLowerCase().includes(q) ||
+      engineerForTicket(t, accountsByName).toLowerCase().includes(q)
+    );
+  }
+
+  const { key, dir } = _reportSort;
+  const mul = dir === "asc" ? 1 : -1;
+  withReport.sort((a, b) => {
+    if (key === "status") return mul * (reportStatusRank(a) - reportStatusRank(b));
+    if (key === "client") return mul * a.client.localeCompare(b.client);
+    return mul * (a.report.created_at || "").localeCompare(b.report.created_at || "");
+  });
+
+  // Phone-only sort buttons: on a phone the table turns into one card per
+  // report (style.css, .reports-table-cards) and its sortable column headers
+  // are hidden, so these take over. Hidden on a computer; same setReportSort().
+  const mobileSortBtn = (k, label) =>
+    `<button type="button" class="secondary${_reportSort.key === k ? " active" : ""}" onclick="setReportSort('${k}')">${label} ${reportSortArrow(k)}</button>`;
+  const mobileSortBar = `<div class="tickets-sort-mobile"><span>Sort by</span>${mobileSortBtn("client", "Client")}${mobileSortBtn("status", "Status")}${mobileSortBtn("date", "Date")}</div>`;
+
+  const list = document.getElementById("list");
+  list.innerHTML = withReport.length
+    ? `${mobileSortBar}<table class="tickets-table reports-table-cards">
+        <thead><tr>
+          <th>Report No.</th><th>Type</th>
+          <th style="cursor:pointer;" onclick="setReportSort('client')">Client ${reportSortArrow("client")}</th>
+          <th>Ticket Link</th><th>Engineer</th>
+          <th style="cursor:pointer;" onclick="setReportSort('status')">Status ${reportSortArrow("status")}</th>
+          <th style="cursor:pointer;" onclick="setReportSort('date')">Date ${reportSortArrow("date")}</th>
+        </tr></thead>
+        <tbody>${withReport.map(t => reportRow(t, accountsByName)).join("")}</tbody>
+      </table>`
+    : emptyState("No reports match.", "document");
+}
+render();
+setInterval(() => {
+  const active = document.activeElement;
+  if (active && active.id === "reportSearch") return;
+  render();
+}, 4000);
+</script>
+</body>
+</html>

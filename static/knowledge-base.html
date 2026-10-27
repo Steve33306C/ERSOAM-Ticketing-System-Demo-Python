@@ -1,0 +1,2600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Base — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Styles below are scoped under .kb-page (CSS variables declared on that
+   wrapper) so they never leak into or clash with the rest of the ERS shell's
+   own --panel/--text tokens. Lifted from the Knowledge Base file your friend
+   built, trimmed to only the rules the 6 included sections actually use —
+   Checklist/Site Visit/Safety/History/Articles-CMS/fake-shell CSS was left
+   out on purpose (see chat for why). */
+.kb-page{
+  --bg:#F7F6F2; --panel:#FFFFFF; --panel-2:#F1EFE8;
+  --line:#D9D5C6; --line-soft:#EDEBE2;
+  --text:#22251F; --text-dim:#565A4C;
+  --amber:#B4650A; --amber-dim:#FCEEDB;
+  --teal:#12805B; --teal-dim:#DEF3EA;
+  --red:#B23A32; --red-dim:#FBE9E6;
+  --blue:#2E63A6;
+  --shadow-sm:0 1px 2px rgba(30,28,20,0.05); --shadow-md:0 2px 10px rgba(30,28,20,0.06);
+  font-family:inherit;
+}
+.kb-page h1,.kb-page h3,.kb-page h4{font-family:inherit;}
+
+.emg-banner {
+    display:flex;gap:8px;align-items:flex-start;
+    background:var(--red-dim);border:1px solid var(--red);border-radius:8px;
+    padding:12px 14px;font-size:13px;color:var(--red);margin-bottom:18px;line-height:1.5;
+  }
+.poster-header-icon {width:56px;height:56px;margin:0 auto 8px;color:var(--red);}
+.poster-header-icon svg {width:100%;height:100%;}
+.poster-header h1 {margin-top:0;}
+.ppe-tagline {font-size:14px;font-weight:600;color:var(--amber);margin:2px 0 0;}
+.ppe-grid {display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0;}
+.ppe-grid {grid-template-columns:1fr;}
+.ppe-card {
+    background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--ppe-color, var(--amber));
+    border-radius:12px;padding:16px 14px;box-shadow:var(--shadow-sm);text-align:center;
+  }
+.ppe-photo {
+    width:100%;height:110px;object-fit:contain;background:#fff;border-radius:8px;
+    margin:-2px 0 10px;padding:6px;
+  }
+.ppe-icon {
+    width:44px;height:44px;margin:0 auto 10px;color:var(--ppe-color, var(--amber));
+    background:color-mix(in srgb, var(--ppe-color, var(--amber)) 18%, transparent);
+    border-radius:50%;display:flex;align-items:center;justify-content:center;padding:10px;
+  }
+.ppe-card:has(.ppe-photo) .ppe-icon {width:30px;height:30px;padding:6px;margin-bottom:8px;}
+.ppe-icon svg {width:100%;height:100%;}
+.ppe-title {font-size:13.5px;font-weight:700;margin:0 0 6px;}
+.ppe-tip {font-size:12px;color:var(--text-dim);line-height:1.5;margin:0;}
+.ppe-fact {
+    display:flex;gap:12px;align-items:flex-start;
+    background:var(--amber-dim);border:1px solid var(--amber);border-radius:12px;
+    padding:16px;margin-top:6px;
+  }
+.ppe-fact-icon {font-size:24px;flex-shrink:0;}
+.ppe-fact-title {font-weight:700;font-size:13.5px;margin:0 0 4px;color:var(--amber);}
+.ppe-fact-text {font-size:13px;color:var(--text-dim);line-height:1.55;margin:0;}
+.qfg-search { width:100%; padding:14px 16px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:15px; margin-bottom:24px; font-family:inherit; }
+.qfg-search:focus { outline:none; border-color:var(--amber); }
+.qfg-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:16px; }
+.qfg-card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:0.2s; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:130px; }
+.qfg-card:hover { border-color:var(--amber); transform:translateY(-2px); box-shadow:var(--shadow-md); }
+.qfg-card .icon { font-size:30px; margin-bottom:10px; }
+.qfg-card h4 { margin:0; font-size:14.5px; color:var(--text); }
+.qfg-card.hidden { display:none; }
+.qfg-answer-card { background:var(--panel); border:2px solid var(--amber); border-radius:12px; padding:28px; margin-top:8px; animation:qfgFadeIn 0.3s ease; }
+.qfg-answer-top { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.qfg-flag { font-size:12.5px; font-weight:700; padding:6px 14px; border-radius:20px; background:var(--amber-dim); color:var(--amber); }
+.qfg-answer-title { font-size:19px; font-weight:700; margin:0; color:var(--text); }
+.qfg-answer-subtitle { font-size:13.5px; color:var(--text-dim); margin:4px 0 22px; }
+.qfg-steps { list-style:none; padding:0; margin:0 0 12px; }
+.qfg-step-row { display:flex; align-items:flex-start; gap:16px; padding:16px 0; border-bottom:1px solid var(--line); }
+.qfg-step-row:last-child { border-bottom:none; }
+.qfg-step-pic { flex-shrink:0; width:76px; height:56px; border-radius:8px; background:var(--panel-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; color:var(--text-dim); padding:8px; }
+.qfg-step-pic svg { width:100%; height:100%; }
+.qfg-step-text { font-size:14px; line-height:1.55; color:var(--text); padding-top:4px; }
+.qfg-step-row--links { align-items:center; }
+.qfg-brand-grid { display:flex; flex-wrap:wrap; gap:10px; padding-top:2px; }
+.qfg-brand-btn {
+    display:inline-block; padding:8px 18px; border-radius:20px;
+    background:var(--panel-2); border:1.5px solid var(--amber);
+    color:var(--amber); font-size:13.5px; font-weight:600;
+    text-decoration:none; transition:background 0.15s, color 0.15s;
+    font-family:inherit;
+  }
+.qfg-brand-btn:hover { background:var(--amber); color:#fff; }
+.article-read {background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;box-shadow:var(--shadow-sm);}
+.article-body h3 {font-size:17px;margin:18px 0 8px;}
+.article-body h3:first-child {margin-top:0;}
+.article-body h4 {font-size:14.5px;color:var(--amber);margin:16px 0 6px;}
+.article-body p {font-size:14px;line-height:1.65;margin:0 0 10px;color:var(--text);}
+.article-body ul, .article-body ol {margin:0 0 12px;padding-left:20px;}
+.article-body li {font-size:14px;line-height:1.6;margin-bottom:5px;}
+.article-body strong {color:var(--amber);}
+.article-read-icon {
+    width:48px;height:48px;flex-shrink:0;font-size:24px;border-radius:12px;
+    background:color-mix(in srgb, var(--art-color, var(--amber)) 18%, transparent);
+    display:flex;align-items:center;justify-content:center;
+  }
+.article-callout {
+    display:flex;gap:10px;align-items:flex-start;
+    background:var(--amber-dim);border:1px solid var(--amber);border-radius:10px;
+    padding:12px 14px;margin:0 0 14px;font-size:13.5px;line-height:1.55;
+  }
+.article-callout b {color:var(--amber);}
+.article-step-list {margin:0 0 14px;}
+.article-step-num {
+    width:24px;height:24px;border-radius:50%;flex-shrink:0;background:var(--amber);color:#1a1305;
+    font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;
+  }
+.article-step-text {font-size:14px;line-height:1.6;padding-top:2px;}
+.article-feedback-btns {display:flex;gap:10px;justify-content:center;}
+.article-feedback-btn {
+    background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+    padding:9px 16px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;
+  }
+.article-feedback-btn:hover {border-color:var(--amber);background:var(--amber-dim);}
+.article-related-title {font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin:0 0 8px;}
+.article-related-link {
+    display:block;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;color:var(--blue);
+    cursor:pointer;margin-bottom:6px;
+  }
+.article-related-link:hover {border-color:var(--blue);}
+.path-container {display:flex;flex-direction:column;gap:10px;margin-bottom:20px;position:relative;padding-left:16px;border-left:2px dashed var(--line-soft);margin-left:10px;}
+.path-step {background:var(--panel-2);border:1px solid var(--line);padding:12px 14px;border-radius:10px;position:relative;}
+.path-step::before {content:'';position:absolute;left:-23px;top:16px;width:10px;height:10px;background:var(--amber);border-radius:50%;box-shadow:0 0 0 3px var(--panel);}
+.path-step h4 {margin:0 0 4px;font-size:13.5px;color:var(--amber);display:flex;align-items:center;gap:8px;}
+.path-step .step-num {background:var(--amber-dim);color:var(--amber);padding:2px 7px;border-radius:4px;font-size:11px;font-family:'IBM Plex Mono',monospace;}
+.path-step p {margin:0;font-size:12.5px;color:var(--text-dim);}
+.flow-list {list-style:none;padding:0;margin:0 0 20px;}
+.flow-list li {display:flex;gap:12px;margin-bottom:10px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);align-items:flex-start;}
+.flow-list li .icon {font-size:16px;flex-shrink:0;}
+.flow-list li strong {display:block;font-size:13.5px;margin-bottom:3px;}
+.flow-list li span {font-size:12px;color:var(--text-dim);line-height:1.5;}
+.flow-list.dc-flow li {border-left:3px solid var(--amber);}
+.flow-list.dc-flow li strong {color:var(--amber);}
+.flow-list.ac-flow li {border-left:3px solid var(--blue);}
+.flow-list.ac-flow li strong {color:var(--blue);}
+.article-callout.accent {background:var(--amber-dim);border-color:var(--amber);}
+.pdf-link-btn {
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--amber);color:#1a1305;font-weight:700;font-size:13.5px;
+    padding:12px 20px;border-radius:8px;text-decoration:none;margin-top:16px;width:100%;
+  }
+.pdf-link-btn:hover {filter:brightness(1.08);}
+.poster-flow {display:flex;flex-direction:column;}
+.poster-card {
+    display:flex;gap:14px;align-items:flex-start;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px;margin-bottom:2px;box-shadow:var(--shadow-sm);
+  }
+.poster-card.decision {background:var(--panel-2);border-color:var(--blue);}
+.poster-card.loop {background:var(--panel-2);border-style:dashed;font-style:italic;}
+.poster-card.loop .poster-title {font-size:13px;font-weight:600;color:var(--text-dim);}
+.poster-card.decision .poster-icon {color:var(--blue);}
+.poster-card.action .poster-icon {color:var(--amber);}
+.poster-card.end.resolved {background:var(--teal-dim);border-color:var(--teal);}
+.poster-card.end.resolved .poster-icon {color:var(--teal);}
+.poster-card.end.danger {background:var(--red-dim);border-color:var(--red);}
+.poster-card.end.danger .poster-icon {color:var(--red);}
+.poster-icon {width:26px;height:26px;flex-shrink:0;}
+.poster-icon svg {width:100%;height:100%;}
+.poster-body {flex:1;}
+.poster-title {font-weight:700;font-size:15px;margin:0 0 4px;line-height:1.35;}
+.poster-tag {font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);font-weight:600;margin:0 0 4px;}
+.poster-detail {font-size:13px;color:var(--text-dim);margin:0;line-height:1.55;}
+.poster-step-image {width:100%;max-width:320px;border-radius:10px;margin-top:12px;display:block;border:1px solid var(--line);}
+.poster-arrow {text-align:center;color:var(--text-dim);font-size:18px;margin:2px 0 6px;}
+.poster-branches {display:flex;flex-direction:column;gap:14px;margin:10px 0 6px;}
+.poster-branch {border-radius:12px;padding:12px;border:2px solid var(--line);}
+.poster-branch.branch-yes {border-color:var(--teal);background:var(--teal-dim);}
+.poster-branch.branch-no {border-color:var(--red);background:var(--red-dim);}
+.poster-branch.branch-other {border-color:var(--amber);background:var(--amber-dim);}
+.poster-branch-label {font-weight:700;font-size:13.5px;margin-bottom:10px;display:flex;align-items:center;gap:7px;}
+.poster-branch-icon {width:17px;height:17px;flex-shrink:0;display:inline-flex;}
+.poster-branch-icon svg {width:100%;height:100%;}
+.poster-branch.branch-yes .poster-branch-icon {color:var(--teal);}
+.poster-branch.branch-no .poster-branch-icon {color:var(--red);}
+.poster-branch.branch-other .poster-branch-icon {color:var(--amber);}
+.poster-branch-body .poster-card {background:var(--panel);}
+.cat {
+    display:flex;flex-direction:column;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-left:4px solid var(--cat-color, var(--amber));
+    border-radius:10px;
+    width:100%;
+    color:var(--text);
+    box-shadow:var(--shadow-sm);
+    transition:box-shadow .15s ease, transform .15s ease;
+    overflow:hidden;
+  }
+.cat:hover {background:var(--panel-2);border-color:var(--line);box-shadow:var(--shadow-md);transform:translateY(-1px);}
+.cat-open {
+    display:flex;align-items:center;gap:14px;width:100%;
+    background:none;border:none;color:inherit;font:inherit;text-align:left;
+    cursor:pointer;padding:16px;
+  }
+.cat-footer {
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:8px 16px 12px;
+  }
+.vis-badge {
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;
+  }
+.cat-edit-btn {
+    background:none;border:1px solid var(--line);color:var(--text-dim);
+    font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;flex-shrink:0;
+  }
+.cat-edit-btn:hover {border-color:var(--amber);color:var(--amber);}
+.modal-card {
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px;max-width:380px;width:100%;box-shadow:var(--shadow-md);
+  }
+.modal-eyebrow {font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin:0 0 4px;}
+.modal-title {font-size:17px;margin:0 0 16px;}
+.vis-option-list {display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+.vis-option {
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;cursor:pointer;color:var(--text);
+  }
+.vis-option.active {border-color:var(--amber);}
+.vis-option-icon {width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;}
+.vis-option-body {flex:1;display:flex;flex-direction:column;gap:1px;}
+.vis-option-label {font-size:13.5px;font-weight:600;}
+.vis-option-desc {font-size:11.5px;color:var(--text-dim);}
+.vis-option-check {color:var(--amber);font-size:15px;}
+.modal-close-btn {
+    width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);
+    background:none;color:var(--text);cursor:pointer;font-weight:600;
+  }
+.modal-close-btn:hover {border-color:var(--amber);color:var(--amber);}
+.kb-preview-row {
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    flex-wrap:wrap;margin-bottom:6px;
+  }
+.kb-preview-row-actions {display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.kb-preview-label {font-size:12.5px;color:var(--text-dim);}
+.kb-preview-label b {color:var(--text);}
+.kb-preview-btn {
+    background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber);
+    font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;flex-shrink:0;
+  }
+.kb-preview-btn:hover {background:var(--panel-2);}
+.kb-hidden-note {font-size:11.5px;color:var(--text-dim);margin:-6px 0 14px;}
+.kb-empty-note {font-size:13px;color:var(--text-dim);padding:18px 4px;text-align:center;}
+.kb-section-add-btn {
+    background:var(--teal-dim);border:1px solid var(--teal);color:var(--teal);
+    font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;flex-shrink:0;
+  }
+.kb-section-add-btn:hover {background:var(--panel-2);}
+.art-status-badge {font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;}
+.art-status-badge.pub {color:var(--teal);}
+.art-status-badge.draft {color:var(--text-dim);}
+.kb-form-label {display:block;font-size:12.5px;font-weight:600;margin:0 0 4px;color:var(--text-dim);}
+.kb-article-modal-card {max-width:560px;text-align:left;}
+.cat-icon {
+    width:42px;height:42px;border-radius:10px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+.cat-icon svg {width:22px;height:22px;}
+.cat-body {flex:1;}
+.cat-name {font-size:15px;font-weight:600;margin:0 0 2px;}
+.cat-alarms {font-size:12.5px;color:var(--text-dim);margin:0;}
+.cat-meta-badge {
+    display:inline-block;font-size:10.5px;font-weight:700;margin-top:6px;
+    padding:3px 8px;border-radius:20px;
+  }
+.kb-hero-icon {font-size:34px;flex-shrink:0;line-height:1.2;}
+.kb-hero h1 {margin:0 0 4px;}
+.kb-hero .sub {margin:0;}
+.kb-section-head {
+    display:flex;align-items:center;gap:8px;
+    background:color-mix(in srgb, var(--kb-sec-color, var(--amber)) 12%, var(--panel-2));
+    border-left:4px solid var(--kb-sec-color, var(--amber));
+    border-radius:8px;padding:10px 12px;margin:20px 0 10px;
+  }
+.kb-section-icon {font-size:16px;}
+.kb-section-title {font-weight:700;font-size:15px;color:var(--kb-sec-color, var(--amber));}
+.cat-arrow {color:var(--text-dim);font-size:18px;flex-shrink:0;}
+.back-btn {
+    background:none;border:none;color:var(--text-dim);
+    font-size:13px;cursor:pointer;padding:8px 0;
+    display:flex;align-items:center;gap:5px;
+  }
+.back-btn:hover {color:var(--text);}
+.top-back {margin-bottom:12px;}
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Knowledge Base — Engineer/Admin/CS only (matches the Tools tab's access:
+// Technician is deliberately excluded per your request).
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "kb", role: session.role, session,
+  pageTitle: "Knowledge Base", pageSubtitle: "Fault-finding guides, emergency response, PPE, solar basics, intern guide & customer quick-fix — reference material for the field team.",
+});
+
+// ===================================================================
+// Everything below this line is lifted from the Knowledge Base file
+// your friend built (knowledgebase.html), trimmed down to ONLY the 6
+// approved sub-sections:
+//   1. Fault-Finding Guides   4. Basic Solar Knowledge
+//   2. Emergency Response     5. O&M Intern Survival Guide
+//   3. PPE Guide              6. Customer Quick Fix Guide
+// plus the EN/MS language toggle.
+//
+// Deliberately NOT included (per our earlier discussion):
+//   - Activity Log (explicitly excluded by request)
+//   - The file's own fake ERS shell/sidebar (ERS_MENU_ITEMS, renderErsShell,
+//     dark-theme toggle) — replaced by the real renderShell() above
+//   - Checklist / Site Visit / Safety Overview / History — separate
+//     features in that file, unrelated to the Knowledge Base section
+//   - A standalone "Articles CMS" (custom help-article editor) found while
+//     tracing the code — it's a distinct feature in that file, never called
+//     from inside the Knowledge Base screens, so it was left out rather than
+//     silently added (it also wasn't one of the 6 sections you asked for).
+// ===================================================================
+
+const TREES = {
+  utility: {
+    label: "Utility-related alarms",
+    code: "UTL",
+    color: "#5B9BD9",
+    alarms: "Utility loss, Vac fail, grid overvoltage, grid outage",
+    start: "u0",
+    nodes: {
+      u0:{kind:"action",title:"Confirm it's safe to work",detail:"Confirm PPE is worn and isolators are safe to operate before touching any breaker or cable.",next:"u1"},
+      u1:{kind:"action",title:"Check inverter display",next:"u2"},
+      u2:{kind:"action",title:"Check AC isolator & MCCB condition",next:"u3"},
+      u3:{kind:"decision",title:"Tripped?",options:[{label:"Yes",cls:"yes",next:"u3a"},{label:"No",cls:"no",next:"u6"}]},
+      u3a:{kind:"decision",title:"Has this breaker tripped more than once recently?",detail:"Repeated trips point to an underlying fault — don't keep resetting.",options:[{label:"No, first trip",cls:"yes",next:"u4"},{label:"Yes, repeat trip",cls:"no",next:"refer_u"}]},
+      u4:{kind:"action",title:"Reset MCCB / AC isolator",next:"u5"},
+      u5:{kind:"action",title:"Restart inverter",next:"end_u"},
+      u6:{kind:"action",title:"Measure AC side",next:"u7"},
+      u7:{kind:"decision",title:"Within limit?",options:[{label:"Yes",cls:"yes",next:"u8"},{label:"No",cls:"no",next:"u11"}]},
+      u8:{kind:"action",title:"Check AC cable & connection",next:"u9"},
+      u9:{kind:"decision",title:"OK?",options:[{label:"Yes",cls:"yes",next:"u5"},{label:"No",cls:"no",next:"u10"}]},
+      u10:{kind:"action",title:"Tighten / repair cable",next:"u5"},
+      u11:{kind:"action",title:"Check grid supply",next:"end_u"},
+      refer_u:{kind:"end",result:"refer",title:"Refer to engineer",detail:"Recurring trips need root-cause investigation before resetting again."},
+      end_u:{kind:"end",result:"ok",title:"End"}
+    }
+  },
+
+  relay:{
+    label:"Internal / relay alarm",
+    code:"REL",
+    color:"#B67FE0",
+    alarms:"Relay check fail",
+    start:"r1",
+    nodes:{
+      r1:{kind:"action",title:"Check firmware version",next:"r2"},
+      r2:{kind:"decision",title:"Is it up to date?",options:[{label:"No",cls:"no",next:"r3"},{label:"Yes",cls:"yes",next:"r4"}]},
+      r3:{kind:"action",title:"Update firmware",next:"r4"},
+      r4:{kind:"action",title:"Check inverter display",next:"r5"},
+      r5:{kind:"decision",title:"Alarm cleared?",options:[{label:"Yes",cls:"yes",next:"end_r"},{label:"No",cls:"no",next:"r6"}]},
+      r6:{kind:"action",title:"Open inverter cover and inspect internal components",detail:"Isolate AC and DC supply first.",next:"r7"},
+      r7:{kind:"decision",title:"Any damage found?",options:[{label:"Yes",cls:"yes",next:"r8"},{label:"No",cls:"no",next:"refer_r"}]},
+      r8:{kind:"action",title:"Replace faulty relay / components",next:"r9"},
+      r9:{kind:"action",title:"Restart inverter",next:"r9a"},
+      r9a:{kind:"decision",title:"Alarm cleared now?",options:[{label:"Yes",cls:"yes",next:"r10"},{label:"No",cls:"no",next:"refer_r2"}]},
+      r10:{kind:"action",title:"Engineer will submit warranty claim",next:"end_r"},
+      refer_r:{kind:"end",result:"refer",title:"Refer to engineer",detail:"No visible damage found and the alarm hasn't cleared — needs further diagnosis."},
+      refer_r2:{kind:"end",result:"refer",title:"Refer to engineer",detail:"Replacement didn't clear the alarm — escalate alongside the warranty claim."},
+      end_r:{kind:"end",result:"ok",title:"End"}
+    }
+  },
+
+  insulation:{
+    label:"Insulation / ground alarms",
+    code:"INS",
+    color:"#E0A23F",
+    alarms:"Low insulation, PE loss, isolation fail",
+    start:"i1",
+    nodes:{
+      i1:{kind:"action",title:"Turn off AC & DC isolator",detail:"DC arc-flash risk — confirm isolation before touching cabling.",next:"i2"},
+      i2:{kind:"action",title:"Visual inspection of DC cables, MC4 connectors & inverter",detail:"Look for damage, water, or burn marks.",next:"i3"},
+      i3:{kind:"decision",title:"Issue found?",options:[{label:"Yes",cls:"yes",next:"i4"},{label:"No",cls:"no",next:"i5"}]},
+      i4:{kind:"action",title:"Repair / replace damaged parts",next:"i5"},
+      i5:{kind:"action",title:"Check grounding (PE) connection properly connected",next:"i6"},
+      i6:{kind:"decision",title:"Connected properly?",options:[{label:"No",cls:"no",next:"i7"},{label:"Yes",cls:"yes",next:"i7b"}]},
+      i7:{kind:"action",title:"Reconnect / tighten PE connection",next:"i7b"},
+      i7b:{kind:"action",title:"Note site conditions",detail:"Rain or high humidity can cause a false low-insulation reading — note conditions before testing.",next:"i8"},
+      i8:{kind:"action",title:"Perform insulation test (Megger)",detail:"Minimum = 1MΩ.",next:"i9"},
+      i9:{kind:"decision",title:"IR above minimum?",options:[{label:"Yes",cls:"yes",next:"end_i"},{label:"No",cls:"no",next:"i10"}]},
+      i10:{kind:"action",title:"Isolate strings one by one",next:"i11"},
+      i11:{kind:"action",title:"Find leakage source / faulty string",next:"i12"},
+      i12:{kind:"action",title:"Repair / replace faulty string / components",next:"i13"},
+      i13:{kind:"decision",title:"IR above minimum now?",detail:"Re-test after the repair before closing this fault.",options:[{label:"Yes",cls:"yes",next:"end_i"},{label:"No",cls:"no",next:"refer_i"}]},
+      refer_i:{kind:"end",result:"refer",title:"Refer to engineer",detail:"Leakage persists after string repair — needs further investigation."},
+      end_i:{kind:"end",result:"ok",title:"End"}
+    }
+  },
+
+  lowgen:{
+    label:"Low generation issue",
+    code:"GEN",
+    color:"#7FC26A",
+    alarms:"Underperformance vs expected output",
+    start:"g0",
+    nodes:{
+      g0:{kind:"decision",title:"Deviation above normal threshold?",detail:"Compare actual generation against expected performance ratio for current weather/irradiance.",options:[{label:"Yes",cls:"no",next:"g1"},{label:"No, normal variation",cls:"yes",next:"end_g_monitor"}]},
+      g1:{kind:"action",title:"Check inverter status",next:"g2"},
+      g2:{kind:"decision",title:"OK?",options:[{label:"No",cls:"no",next:"g3"},{label:"Yes",cls:"yes",next:"g4"}]},
+      g3:{kind:"action",title:"Restart inverter",next:"end_g"},
+      g4:{kind:"action",title:"Check AC side",next:"g5"},
+      g5:{kind:"decision",title:"Normal?",options:[{label:"No",cls:"no",next:"g6"},{label:"Yes",cls:"yes",next:"g7"}]},
+      g6:{kind:"action",title:"Fix AC issue",detail:"Voltage / cable / MCCB.",next:"end_g"},
+      g7:{kind:"action",title:"Check DC side",detail:"Perform Voc test (per string). Perform Isc test (per string).",next:"g7b"},
+      g7b:{kind:"action",title:"Compare vs neighboring strings",detail:"Helps isolate a single faulty string from a system-wide issue.",next:"g8"},
+      g8:{kind:"decision",title:"OK?",options:[{label:"Yes",cls:"yes",next:"g9"},{label:"No",cls:"no",next:"g10"}]},
+      g9:{kind:"action",title:"Check for shading / dirty panel / faulty panel",next:"g11"},
+      g11:{kind:"decision",title:"Normal?",options:[{label:"Yes",cls:"yes",next:"g12"},{label:"No",cls:"no",next:"refer_g"}]},
+      g12:{kind:"action",title:"Clean panels / remove shading",next:"g13"},
+      g13:{kind:"action",title:"Monitor system generation",next:"end_g"},
+      g10:{kind:"action",title:"Check all connections",detail:"Loose / burnt connection.",next:"g14"},
+      g14:{kind:"action",title:"Check for open circuit / panel / string issue",next:"g15"},
+      g15:{kind:"action",title:"Fix DC issue",detail:"Cable, string, connection.",next:"g13"},
+      refer_g:{kind:"end",result:"refer",title:"Refer to engineer"},
+      end_g_monitor:{kind:"end",result:"ok",title:"Within normal range",detail:"No action needed — continue routine monitoring."},
+      end_g:{kind:"end",result:"ok",title:"End"}
+    }
+  },
+
+  fan:{
+    label:"Fan / overheating alarm",
+    code:"FAN",
+    color:"#E0777A",
+    alarms:"Internal fan fail, external fan fail",
+    start:"f1",
+    nodes:{
+      f1:{kind:"action",title:"Check inverter temperature",next:"f2"},
+      f2:{kind:"decision",title:"High?",options:[{label:"No",cls:"no",next:"f3"},{label:"Yes",cls:"yes",next:"f2b"}]},
+      f3:{kind:"action",title:"Monitor system",next:"end_f"},
+      f2b:{kind:"action",title:"Check ambient temperature",detail:"Check the temperature around the inverter enclosure.",next:"f2c"},
+      f2c:{kind:"decision",title:"Ambient unusually high?",detail:"Above the inverter's rated operating range.",options:[{label:"No",cls:"no",next:"f4"},{label:"Yes",cls:"yes",next:"end_f_env"}]},
+      f4:{kind:"action",title:"Check fan operation",next:"f5"},
+      f5:{kind:"decision",title:"Running?",options:[{label:"No",cls:"no",next:"f6"},{label:"Yes",cls:"yes",next:"f9"}]},
+      f6:{kind:"action",title:"Inspect fan condition",next:"f7"},
+      f7:{kind:"decision",title:"Blocked / dusty?",options:[{label:"Yes",cls:"yes",next:"f8a"},{label:"No",cls:"no",next:"f8b"}]},
+      f8a:{kind:"action",title:"Clean ventilation / fan",next:"f10"},
+      f8b:{kind:"action",title:"Replace faulty fan",next:"f10"},
+      f9:{kind:"action",title:"Ensure proper airflow",detail:"Sufficient space around inverter.",next:"f11"},
+      f11:{kind:"decision",title:"OK?",options:[{label:"Yes",cls:"yes",next:"f10"},{label:"No",cls:"no",next:"f12"}]},
+      f12:{kind:"action",title:"Improve airflow / spacing",next:"f10"},
+      f10:{kind:"action",title:"Restart inverter",next:"f13"},
+      f13:{kind:"decision",title:"Normal?",options:[{label:"Yes",cls:"yes",next:"end_f"},{label:"No",cls:"no",next:"refer_f"}]},
+      end_f:{kind:"end",result:"ok",title:"End"},
+      end_f_env:{kind:"end",result:"ok",title:"Environmental cause",detail:"The inverter may be auto-de-rating output due to ambient heat. Improve airflow or shading around the enclosure — not necessarily a component fault."},
+      refer_f:{kind:"end",result:"refer",title:"Refer to engineer"}
+    }
+  },
+
+  comms:{
+    label:"Communication issue",
+    code:"COM",
+    color:"#8FA0A8",
+    alarms:"WiFi connection issues",
+    start:"c1",
+    nodes:{
+      c1:{kind:"action",title:"Check internet / router",next:"c2"},
+      c2:{kind:"decision",title:"Working?",options:[{label:"No",cls:"no",next:"c3"},{label:"Yes",cls:"yes",next:"c4"}]},
+      c3:{kind:"action",title:"Fix internet / router",next:"c4"},
+      c4:{kind:"action",title:"Check WiFi signal strength",next:"c5"},
+      c5:{kind:"decision",title:"Strong?",options:[{label:"No",cls:"no",next:"c6"},{label:"Yes",cls:"yes",next:"c7"}]},
+      c6:{kind:"action",title:"Move router / add WiFi extender",detail:"On a 4G/cellular dongle instead, check cellular signal strength here too.",next:"c7"},
+      c7:{kind:"action",title:"Restart device",detail:"Router & dongle.",next:"c8"},
+      c8:{kind:"decision",title:"Successful?",options:[{label:"No",cls:"no",next:"c9"},{label:"Yes",cls:"yes",next:"c10"}]},
+      c9:{kind:"action",title:"Reconfigure WiFi",detail:"Re-enter WiFi settings, check connection details, and verify dongle firmware / pairing.",next:"c10"},
+      c10:{kind:"action",title:"Check monitoring portal data",detail:"Note the last-update timestamp.",next:"c11"},
+      c11:{kind:"decision",title:"Updating?",options:[{label:"Yes",cls:"yes",next:"end_c"},{label:"No",cls:"no",next:"refer_c"}]},
+      end_c:{kind:"end",result:"ok",title:"End"},
+      refer_c:{kind:"end",result:"refer",title:"Refer to engineer"}
+    }
+  },
+
+  emergency_general: {
+    label: "General Emergency",
+    icon: "alert-triangle",
+    code: "EMG",
+    color: "#D9534F",
+    alarms: "Any accident or emergency on site",
+    start: "eg1",
+    nodes: {
+      eg1:{kind:"decision",icon:"search",title:"Is the scene safe for me to approach?",options:[{label:"Yes — Safe",cls:"yes",next:"eg2"},{label:"No — Unsafe (fire, live wires, fumes)",cls:"no",next:"eg_noentry"}]},
+      eg_noentry:{kind:"end",icon:"no-entry",result:"refer",title:"DO NOT ENTER",detail:"Call Emergency Services FIRST. Also call Site Control / Security."},
+      eg2:{kind:"action",icon:"stop-hand",title:"Stop work",detail:"Shout for help / alert your buddy.",next:"eg3"},
+      eg3:{kind:"decision",icon:"lungs",title:"Is victim conscious & breathing?",options:[{label:"No",cls:"no",next:"eg4"},{label:"Yes",cls:"yes",next:"eg6"}]},
+      eg4:{kind:"action",icon:"phone",title:"Call Emergency Services",detail:"999 / 911 / local emergency number. Also alert Site Security / Control Room.",next:"eg5"},
+      eg5:{kind:"action",icon:"cpr",title:"Begin CPR if trained",detail:"Use AED if available. Continue until help arrives.",next:"eg_report"},
+      eg6:{kind:"action",icon:"first-aid",title:"Assess injuries",detail:"Keep victim calm & still.",next:"eg7"},
+      eg7:{kind:"decision",icon:"scale",title:"Severity?",options:[{label:"Minor — Cut / Bruise",cls:"yes",next:"eg8"},{label:"Major — Fall / Burn / Shock",cls:"no",next:"eg9"}]},
+      eg8:{kind:"action",icon:"first-aid",title:"Administer first aid",detail:"Log the incident. Decide if further medical care is needed.",next:"eg_report"},
+      eg9:{kind:"action",icon:"phone",title:"Call Emergency Services",detail:"999 / 911 / local emergency. DO NOT move the victim unless in danger.",next:"eg_report"},
+      eg_report:{kind:"action",icon:"report",title:"Incident report",detail:"Inform supervisor / office. Preserve evidence / take photos. Do not disturb the scene unless needed.",next:"eg_closure"},
+      eg_closure:{kind:"end",icon:"lock",result:"refer",title:"Site closure",detail:"Stop all work for the day. Only resume after investigation clearance."}
+    }
+  },
+
+  emergency_shock: {
+    label: "Electrical Shock / Arc Flash",
+    icon: "lightning",
+    code: "SHK",
+    color: "#D9534F",
+    alarms: "Electrical shock or arc flash injury",
+    start: "es1",
+    nodes: {
+      es1:{kind:"decision",icon:"lightning",title:"Is victim still in contact with the live source?",options:[{label:"Yes",cls:"no",next:"es_notouch"},{label:"No — already separated",cls:"yes",next:"es_call"}]},
+      es_notouch:{kind:"action",icon:"no-touch",title:"DO NOT TOUCH THE VICTIM",detail:"Not with bare hands — you will become part of the circuit.",next:"es_power"},
+      es_power:{kind:"action",icon:"power-off",title:"Turn off power",detail:"At the main disconnect, or use a non-conductive pole/wood to push the victim away from the source.",next:"es_call"},
+      es_call:{kind:"action",icon:"phone",title:"Call Emergency Services",detail:"999 / 911 — state ELECTRICAL INJURY.",next:"es_breathing"},
+      es_breathing:{kind:"decision",icon:"lungs",title:"Is victim breathing?",options:[{label:"No",cls:"no",next:"es_cpr"},{label:"Yes",cls:"yes",next:"es_monitor"}]},
+      es_cpr:{kind:"action",icon:"cpr",title:"Start CPR immediately",detail:"Use AED if available. Electrical burns often cause cardiac arrest.",next:"es_continue"},
+      es_monitor:{kind:"action",icon:"stethoscope",title:"Monitor breathing & pulse",detail:"Treat for shock — keep warm. Elevate legs if no spinal injury.",next:"es_continue"},
+      es_continue:{kind:"action",icon:"hourglass",title:"Continue until help arrives",next:"es_inform"},
+      es_inform:{kind:"action",icon:"report",title:"Inform supervisor / safety officer",detail:"DO NOT restart the system until fully investigated by a qualified electrician.",next:"es_hospital"},
+      es_hospital:{kind:"end",icon:"hospital",result:"refer",title:"Victim MUST go to hospital",detail:"Even if feeling fine — internal burns are possible."}
+    }
+  },
+
+  emergency_fall: {
+    label: "Fall From Height",
+    icon: "person-fall",
+    code: "FAL",
+    color: "#D9534F",
+    alarms: "Fall from roof, ladder, or scaffold",
+    start: "ef1",
+    nodes: {
+      ef1:{kind:"action",icon:"no-entry",title:"Do not move victim",detail:"Unless in immediate danger (fire / falling debris).",next:"ef2"},
+      ef2:{kind:"action",icon:"spine",title:"Assume spinal injury",detail:"Until cleared by a medical professional.",next:"ef3"},
+      ef3:{kind:"action",icon:"phone",title:"Call Emergency Services",detail:"999 / 911 — state HEIGHT FALL. Give exact location and roof access details.",next:"ef4"},
+      ef4:{kind:"action",icon:"warmth",title:"Keep victim still and warm",detail:"Do not remove helmet. Check breathing & consciousness.",next:"ef5"},
+      ef5:{kind:"decision",icon:"lungs",title:"Breathing?",options:[{label:"No",cls:"no",next:"ef6"},{label:"Yes",cls:"yes",next:"ef7"}]},
+      ef6:{kind:"action",icon:"cpr",title:"Start CPR",detail:"Minimize neck movement — jaw thrust method, NO head tilt.",next:"ef8"},
+      ef7:{kind:"action",icon:"heart-care",title:"Reassure victim",detail:"Control any visible bleeding. Apply pressure if safe.",next:"ef8"},
+      ef8:{kind:"action",icon:"hourglass",title:"Continue until paramedics arrive",detail:"They will immobilize the spine.",next:"ef9"},
+      ef9:{kind:"end",icon:"photo",result:"refer",title:"Secure the scene",detail:"Take photos of the fall point. Preserve the ladder/equipment for investigation. Report to site control immediately."}
+    }
+  },
+
+  emergency_fire: {
+    label: "Fire — PV Array / Inverter / Combiner Box",
+    icon: "flame",
+    code: "FIR",
+    color: "#D9534F",
+    alarms: "Fire at PV array, inverter, or combiner box",
+    start: "ex1",
+    nodes: {
+      ex1:{kind:"decision",icon:"flame",title:"Is it small, contained, and do you have a Class C extinguisher?",options:[{label:"Yes",cls:"yes",next:"ex2"},{label:"No — growing fire",cls:"no",next:"ex_evac"}]},
+      ex_evac:{kind:"action",icon:"evacuate",title:"Evacuate immediately",detail:"Shout FIRE — alert everyone.",next:"ex_firedept"},
+      ex2:{kind:"action",icon:"power-off",title:"Kill power",detail:"Disconnect AC and DC if safe to do so from a distance. PV panels will still produce DC in sunlight.",next:"ex3"},
+      ex3:{kind:"action",icon:"extinguisher",title:"Use Class C extinguisher",detail:"Stand at a safe distance (min 3m). Aim at the base of the fire. Sweep side to side.",next:"ex4"},
+      ex4:{kind:"decision",icon:"flame",title:"Fire out?",options:[{label:"Yes",cls:"yes",next:"ex5"},{label:"No",cls:"no",next:"ex_firedept"}]},
+      ex5:{kind:"action",icon:"eye",title:"Monitor area for re-ignition",detail:"Do NOT restart the system. Call site control & supervisor.",next:"ex6"},
+      ex6:{kind:"end",icon:"report",result:"refer",title:"Complete incident report",detail:"Do NOT touch damaged equipment. Wait for the fire investigator."},
+      ex_firedept:{kind:"action",icon:"phone",title:"Call Fire Department",detail:"999 / 911 — state SOLAR PV FIRE. Advise: PV panels remain LIVE. Do NOT use water until power is confirmed off.",next:"ex7"},
+      ex7:{kind:"end",icon:"no-entry",result:"refer",title:"Do not re-enter",detail:"If smoke is present, do not re-enter the building. Meet emergency services at the entrance."}
+    }
+  }
+};
+
+const EMERGENCY_TREE_KEYS = ["emergency_general", "emergency_shock", "emergency_fall", "emergency_fire"];
+
+const EMG_ICONS = {
+  "alert-triangle": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20Z"/><path d="M12 9v5M12 17h.01"/></svg>`,
+  "lightning": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>`,
+  "person-fall": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2"/><path d="M8 8v4l4 2 3 5M12 12l4-2 3 3"/></svg>`,
+  "flame": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1-1-2-1-3 2 1 3 3 3 5a5 5 0 0 1-10 0c0-5 3-6 5-11Z"/></svg>`,
+  "search": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"/><path d="m20 20-5.5-5.5"/></svg>`,
+  "no-entry": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.5 5.5 13 13"/></svg>`,
+  "stop-hand": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8l6 6v8l-6 6H8l-6-6V8Z"/><path d="M9 12h6"/></svg>`,
+  "lungs": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6"/><path d="M12 9c-2 0-4 2-4 5v4a2 2 0 0 1-4 0v-6c0-3 2-5 4-6"/><path d="M12 9c2 0 4 2 4 5v4a2 2 0 0 0 4 0v-6c0-3-2-5-4-6"/></svg>`,
+  "phone": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L14 13l5 2v4a2 2 0 0 1-2 2A15 15 0 0 1 4 6a2 2 0 0 1 0-2Z"/></svg>`,
+  "cpr": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-16 0c0 4 4 7 8 10 4-3 8-6 8-10Z"/><path d="M8 12h2l1.5-3 2 6 1.5-3H18"/></svg>`,
+  "first-aid": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>`,
+  "scale": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M5 7h14M9 21h6M12 17v4"/><path d="M5 7 2 13a3 3 0 0 0 6 0Z"/><path d="M19 7l-3 6a3 3 0 0 0 6 0Z"/></svg>`,
+  "report": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="1.3"/><path d="M9 3.5h6a1 1 0 0 1 1 1V6H8V4.5a1 1 0 0 1 1-1Z"/><path d="M9 12h6M9 16h6"/></svg>`,
+  "lock": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`,
+  "no-touch": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V6a2 2 0 1 1 4 0v5M11 10V4a2 2 0 1 1 4 0v7M15 11V6a2 2 0 1 1 4 0v9c0 3-2 6-6 6h-1c-3 0-4-1-6-4l-2-3a1.5 1.5 0 0 1 2-2l1.5 1.5"/><path d="m3 3 18 18"/></svg>`,
+  "power-off": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M7 8h10v3a5 5 0 0 1-10 0Z"/><path d="M12 16v6"/></svg>`,
+  "stethoscope": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a4 4 0 0 0 8 0V3"/><circle cx="18" cy="15" r="3"/><path d="M14 9v3a4 4 0 0 0 4 4"/></svg>`,
+  "hourglass": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9-1 3-5 4-5 9M17 3c0 5-4 6-5 9 1 3 5 4 5 9"/></svg>`,
+  "hospital": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>`,
+  "spine": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 8v8M8.5 12h7M9 20l3-4 3 4"/></svg>`,
+  "warmth": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/></svg>`,
+  "heart-care": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-9.5-9A5 5 0 0 1 12 6a5 5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9Z"/></svg>`,
+  "photo": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
+  "evacuate": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>`,
+  "extinguisher": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="8" height="13" rx="2"/><path d="M11 8V5h4M13 5V2"/><path d="M16 10l4-2"/></svg>`,
+  "eye": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  "check-circle": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>`,
+  "x-circle": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>`,
+  "dot": `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>`,
+  "hard-hat": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15a8 8 0 0 1 16 0"/><rect x="2" y="15" width="20" height="3.5" rx="1.5"/><path d="M12 7V4"/></svg>`,
+  "glove": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4M10 10V5a1.5 1.5 0 0 1 3 0v5M13 10V6a1.5 1.5 0 0 1 3 0v6c0 4-3 7-7 7s-6-3-6-6.5v-1.5a1.5 1.5 0 0 1 3 0v1"/></svg>`,
+  "boot": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v9l-4 4v3h17c0-3-2-5-5-6l-4-2V3Z"/></svg>`,
+  "harness": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.2"/><path d="M7 21l5-9 5 9M7 8l5 4 5-4"/></svg>`,
+  "vest": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 5 6v14h14V6l-3-3"/><path d="M8 3c1 2 2 3 4 3s3-1 4-3"/><path d="M5 11h3M16 11h3M5 16h3M16 16h3"/></svg>`,
+};
+
+function emgIcon(key, fallbackKey){ return EMG_ICONS[key] || EMG_ICONS[fallbackKey] || EMG_ICONS['alert-triangle']; }
+
+const KB_TREES = {
+  kb_insulation: {
+    label: "Insulation / Ground Alarm", color: "#E0A23F", icon: "lightning",
+    desc: "IR test & string isolation reference",
+    start: "n1",
+    nodes: {
+      n1:{kind:"action",icon:"power-off",title:"Turn off AC & DC isolators before handling array cabling",next:"n2"},
+      n2:{kind:"action",icon:"search",title:"Inspect MC4 connectors, cables and inverter entry points",detail:"Check for water ingress or damage.",next:"n3"},
+      n3:{kind:"action",icon:"lightning",title:"Perform Megger test",detail:"Between positive/negative DC conductors and earth.",next:"n4"},
+      n4:{kind:"decision",icon:"scale",title:"Is IR reading ≥ 1MΩ?",options:[{label:"Yes",cls:"yes",next:"n5"},{label:"No",cls:"no",next:"n6"}]},
+      n5:{kind:"end",icon:"first-aid",result:"ok",title:"Insulation is healthy",detail:"Re-energize the system."},
+      n6:{kind:"action",icon:"eye",title:"Disconnect PV strings individually",detail:"Pinpoint the faulty string.",next:"n7"},
+      n7:{kind:"end",icon:"first-aid",result:"ok",title:"Replace damaged cable, MC4 connector, or PV module",detail:"Whichever component is showing ground leakage."}
+    }
+  },
+  kb_relay: {
+    label: "Internal / Relay Alarm", color: "#B67FE0", icon: "search",
+    desc: "Firmware & relay inspection reference",
+    start: "r1",
+    nodes: {
+      r1:{kind:"action",icon:"phone",title:"Check firmware version via app",next:"r2"},
+      r2:{kind:"decision",icon:"scale",title:"Is it up to date?",options:[{label:"No",cls:"no",next:"r3"},{label:"Yes",cls:"yes",next:"r4"}]},
+      r3:{kind:"action",icon:"hourglass",title:"Update firmware via app",next:"r5"},
+      r4:{kind:"action",icon:"eye",title:"Check inverter display",next:"r6"},
+      r6:{kind:"decision",icon:"scale",title:"Alarm cleared?",options:[{label:"Yes",cls:"yes",next:"r_end1"},{label:"No",cls:"no",next:"r5"}]},
+      r5:{kind:"action",icon:"power-off",title:"Open inverter front cover",next:"r7"},
+      r7:{kind:"action",icon:"search",title:"Inspect relays / PCBs for burn marks",next:"r8"},
+      r8:{kind:"decision",icon:"scale",title:"Any damage found?",options:[{label:"No",cls:"no",next:"r9"},{label:"Yes",cls:"yes",next:"r10"}]},
+      r9:{kind:"end",icon:"report",result:"refer",title:"Engineer will submit warranty claim"},
+      r10:{kind:"action",icon:"first-aid",title:"Replace any faulty relay or components",next:"r11"},
+      r11:{kind:"action",icon:"power-off",title:"Restart inverter",next:"r_end2"},
+      r_end1:{kind:"end",icon:"first-aid",result:"ok",title:"Alarm cleared"},
+      r_end2:{kind:"end",icon:"first-aid",result:"ok",title:"Inverter restarted"}
+    }
+  },
+  kb_utility: {
+    label: "Utility-Related Alarms", color: "#5B9BD9", icon: "lightning",
+    desc: "Breaker & AC voltage reference",
+    start: "u1",
+    nodes: {
+      u1:{kind:"action",icon:"eye",title:"Check inverter display for grid fault code",next:"u2"},
+      u2:{kind:"action",icon:"search",title:"Check AC isolator & MCCB breaker status",next:"u3"},
+      u3:{kind:"decision",icon:"scale",title:"Is the breaker tripped?",options:[{label:"Yes",cls:"yes",next:"u4"},{label:"No",cls:"no",next:"u9"}]},
+      u4:{kind:"action",icon:"lightning",title:"Measure load side with multimeter for short circuit",next:"u5"},
+      u5:{kind:"decision",icon:"scale",title:"Is a short circuit present?",options:[{label:"Yes",cls:"no",next:"u6"},{label:"No",cls:"yes",next:"u7"}]},
+      u6:{kind:"end",icon:"report",result:"refer",title:"Do not reset — repair AC wiring"},
+      u7:{kind:"action",icon:"power-off",title:"Reset breaker once",next:"u9"},
+      u9:{kind:"action",icon:"lightning",title:"Measure AC voltage",next:"u10"},
+      u10:{kind:"decision",icon:"scale",title:"Is voltage within the limit?",options:[{label:"Yes",cls:"yes",next:"u11"},{label:"No",cls:"no",next:"u14"}]},
+      u11:{kind:"action",icon:"search",title:"Check AC cable & connection",next:"u12"},
+      u12:{kind:"decision",icon:"scale",title:"Is it okay?",options:[{label:"Yes",cls:"yes",next:"u13"},{label:"No",cls:"no",next:"u13b"}]},
+      u13:{kind:"action",icon:"power-off",title:"Restart inverter",next:"u_end"},
+      u13b:{kind:"action",icon:"first-aid",title:"Tighten or repair loose AC cables",next:"u13"},
+      u14:{kind:"end",icon:"report",result:"refer",title:"Check grid supply"},
+      u_end:{kind:"end",icon:"first-aid",result:"ok",title:"Inverter restarted"}
+    }
+  },
+  kb_lowgen: {
+    label: "Low Generation Issue", color: "#7FC26A", icon: "eye",
+    desc: "Voc/Isc & panel check reference",
+    start: "g1",
+    nodes: {
+      g1:{kind:"action",icon:"eye",title:"Check inverter status",next:"g2"},
+      g2:{kind:"decision",icon:"scale",title:"Is inverter online?",options:[{label:"No",cls:"no",next:"g3"},{label:"Yes",cls:"yes",next:"g4"}]},
+      g3:{kind:"action",icon:"power-off",title:"Restart inverter",next:"g1"},
+      g4:{kind:"action",icon:"lightning",title:"Check AC voltage stability",next:"g5"},
+      g5:{kind:"action",icon:"lightning",title:"Check DC array input voltages",next:"g6"},
+      g6:{kind:"action",icon:"lightning",title:"Measure open circuit voltage (Voc) and short circuit current (Isc) per string",next:"g7"},
+      g7:{kind:"decision",icon:"scale",title:"Are Voc and Isc values normal?",options:[{label:"Yes",cls:"yes",next:"g8"},{label:"No",cls:"no",next:"g11"}]},
+      g8:{kind:"action",icon:"search",title:"Check panels for heavy dirt, dust, shading or faulty panel",next:"g9"},
+      g9:{kind:"action",icon:"first-aid",title:"Clean panels or remove shading",next:"g10"},
+      g10:{kind:"action",icon:"eye",title:"Check power generation",next:"g10b"},
+      g10b:{kind:"decision",icon:"scale",title:"Is generation normal?",options:[{label:"Yes",cls:"yes",next:"g_end"},{label:"No",cls:"no",next:"g_refer"}]},
+      g11:{kind:"action",icon:"search",title:"Check for open circuits or blown fuses",next:"g12"},
+      g12:{kind:"action",icon:"first-aid",title:"Repair or replace faulty string components",next:"g6"},
+      g_end:{kind:"end",icon:"first-aid",result:"ok",title:"Generation restored to normal"},
+      g_refer:{kind:"end",icon:"report",result:"refer",title:"Refer to engineer"}
+    }
+  },
+  kb_fan: {
+    label: "Fan / Overheating Alarm", color: "#E0777A", icon: "eye",
+    desc: "Cooling & temperature reference",
+    start: "f1",
+    nodes: {
+      f1:{kind:"action",icon:"eye",title:"Check inverter temperature",next:"f2"},
+      f2:{kind:"action",icon:"search",title:"Check if internal and external cooling fans spin freely",next:"f3"},
+      f3:{kind:"decision",icon:"scale",title:"Do fans spin?",options:[{label:"No",cls:"no",next:"f4"},{label:"Yes",cls:"yes",next:"f5"}]},
+      f4:{kind:"action",icon:"first-aid",title:"Replace faulty fans and test",next:"f5"},
+      f5:{kind:"action",icon:"search",title:"Clear vent obstructions",next:"f6"},
+      f6:{kind:"action",icon:"first-aid",title:"Clean dust buildup",next:"f7"},
+      f7:{kind:"action",icon:"eye",title:"Re-check temperature reading",next:"f8"},
+      f8:{kind:"decision",icon:"scale",title:"Is temperature now within normal range?",options:[{label:"Yes",cls:"yes",next:"f_end"},{label:"No",cls:"no",next:"f_refer"}]},
+      f_end:{kind:"end",icon:"first-aid",result:"ok",title:"Temperature normal"},
+      f_refer:{kind:"end",icon:"report",result:"refer",title:"Refer to engineer"}
+    }
+  },
+  kb_comms: {
+    label: "Communication Issue", color: "#8FA0A8", icon: "phone",
+    desc: "Network & WiFi reference",
+    start: "c1",
+    nodes: {
+      c1:{kind:"action",icon:"eye",title:"Check internet availability",next:"c2"},
+      c2:{kind:"action",icon:"search",title:"Verify router power, WAN connectivity and local network status",next:"c3"},
+      c3:{kind:"decision",icon:"scale",title:"Is internet working?",options:[{label:"No",cls:"no",next:"c4"},{label:"Yes",cls:"yes",next:"c6"}]},
+      c4:{kind:"action",icon:"search",title:"Troubleshoot network or router",next:"c5"},
+      c5:{kind:"action",icon:"power-off",title:"Restore internet connection",next:"c7"},
+      c6:{kind:"action",icon:"eye",title:"Check WiFi signal strength at inverter location",next:"c7"},
+      c7:{kind:"action",icon:"power-off",title:"Power cycle router and WiFi dongle",next:"c8"},
+      c8:{kind:"action",icon:"phone",title:"Reconfigure WiFi credentials via app",next:"c9"},
+      c9:{kind:"decision",icon:"scale",title:"Is data updating on portal?",options:[{label:"Yes",cls:"yes",next:"c_end"},{label:"No",cls:"no",next:"c_refer"}]},
+      c_end:{kind:"end",icon:"first-aid",result:"ok",title:"Data updating normally"},
+      c_refer:{kind:"end",icon:"report",result:"refer",title:"Refer to engineer"}
+    }
+  }
+};
+
+const KB_MS = {
+  kb_insulation: {
+    __label: "Penggera Penebatan / Bumi", __desc: "Rujukan ujian IR & pengasingan tali",
+    n1:{title:"Matikan pemencil AC & DC sebelum mengendalikan pendawaian array"},
+    n2:{title:"Periksa penyambung MC4, kabel dan titik masuk inverter",detail:"Semak kemasukan air atau kerosakan."},
+    n3:{title:"Lakukan ujian Megger",detail:"Antara konduktor DC positif/negatif dan bumi."},
+    n4:{title:"Adakah bacaan IR ≥ 1MΩ?",options:["Ya","Tidak"]},
+    n5:{title:"Penebatan sihat",detail:"Hidupkan semula sistem."},
+    n6:{title:"Putuskan sambungan setiap tali PV secara berasingan",detail:"Kenal pasti tali yang rosak."},
+    n7:{title:"Gantikan kabel yang rosak, penyambung MC4, atau modul PV",detail:"Mana-mana komponen yang menunjukkan kebocoran bumi."}
+  },
+  kb_relay: {
+    __label: "Penggera Geganti Dalaman", __desc: "Rujukan firmware & pemeriksaan geganti",
+    r1:{title:"Semak versi firmware melalui aplikasi"},
+    r2:{title:"Adakah ia terkini?",options:["Tidak","Ya"]},
+    r3:{title:"Kemas kini firmware melalui aplikasi"},
+    r4:{title:"Semak paparan inverter"},
+    r6:{title:"Adakah penggera dikosongkan?",options:["Ya","Tidak"]},
+    r5:{title:"Buka penutup hadapan inverter"},
+    r7:{title:"Periksa geganti / PCB untuk kesan terbakar"},
+    r8:{title:"Adakah kerosakan dijumpai?",options:["Tidak","Ya"]},
+    r9:{title:"Jurutera akan mengemukakan tuntutan waranti"},
+    r10:{title:"Gantikan geganti atau komponen yang rosak"},
+    r11:{title:"Mulakan semula inverter"},
+    r_end1:{title:"Penggera telah dikosongkan"},
+    r_end2:{title:"Inverter telah dimulakan semula"}
+  },
+  kb_utility: {
+    __label: "Penggera Berkaitan Utiliti", __desc: "Rujukan pemutus litar & voltan AC",
+    u1:{title:"Semak paparan inverter untuk kod kerosakan grid"},
+    u2:{title:"Semak status pemencil AC & pemutus litar MCCB"},
+    u3:{title:"Adakah pemutus litar tersandung?",options:["Ya","Tidak"]},
+    u4:{title:"Ukur bahagian beban dengan multimeter untuk litar pintas"},
+    u5:{title:"Adakah litar pintas dikesan?",options:["Ya","Tidak"]},
+    u6:{title:"Jangan tetapkan semula — baiki pendawaian AC"},
+    u7:{title:"Tetapkan semula pemutus litar sekali sahaja"},
+    u9:{title:"Ukur voltan AC"},
+    u10:{title:"Adakah voltan dalam had yang ditetapkan?",options:["Ya","Tidak"]},
+    u11:{title:"Semak kabel & sambungan AC"},
+    u12:{title:"Adakah ia baik?",options:["Ya","Tidak"]},
+    u13:{title:"Mulakan semula inverter"},
+    u13b:{title:"Ketatkan atau baiki kabel AC yang longgar"},
+    u14:{title:"Semak bekalan grid"},
+    u_end:{title:"Inverter telah dimulakan semula"}
+  },
+  kb_lowgen: {
+    __label: "Isu Penjanaan Rendah", __desc: "Rujukan Voc/Isc & pemeriksaan panel",
+    g1:{title:"Semak status inverter"},
+    g2:{title:"Adakah inverter dalam talian?",options:["Tidak","Ya"]},
+    g3:{title:"Mulakan semula inverter"},
+    g4:{title:"Semak kestabilan voltan AC"},
+    g5:{title:"Semak voltan input array DC"},
+    g6:{title:"Ukur voltan litar terbuka (Voc) dan arus litar pintas (Isc) setiap tali"},
+    g7:{title:"Adakah nilai Voc dan Isc normal?",options:["Ya","Tidak"]},
+    g8:{title:"Semak panel untuk debu tebal, habuk, keteduhan atau panel rosak"},
+    g9:{title:"Bersihkan panel atau alihkan keteduhan"},
+    g10:{title:"Semak penjanaan kuasa"},
+    g10b:{title:"Adakah penjanaan normal?",options:["Ya","Tidak"]},
+    g11:{title:"Semak litar terbuka atau fius terbakar"},
+    g12:{title:"Baiki atau gantikan komponen tali yang rosak"},
+    g_end:{title:"Penjanaan telah kembali normal"},
+    g_refer:{title:"Rujuk kepada jurutera"}
+  },
+  kb_fan: {
+    __label: "Penggera Kipas / Terlebih Panas", __desc: "Rujukan penyejukan & suhu",
+    f1:{title:"Semak suhu inverter"},
+    f2:{title:"Semak sama ada kipas penyejuk dalaman dan luaran berputar bebas"},
+    f3:{title:"Adakah kipas berputar?",options:["Tidak","Ya"]},
+    f4:{title:"Gantikan kipas yang rosak dan uji"},
+    f5:{title:"Bersihkan halangan pengudaraan"},
+    f6:{title:"Bersihkan pengumpulan habuk"},
+    f7:{title:"Semak semula bacaan suhu"},
+    f8:{title:"Adakah suhu kini dalam julat normal?",options:["Ya","Tidak"]},
+    f_end:{title:"Suhu normal"},
+    f_refer:{title:"Rujuk kepada jurutera"}
+  },
+  kb_comms: {
+    __label: "Isu Komunikasi", __desc: "Rujukan rangkaian & WiFi",
+    c1:{title:"Semak ketersediaan internet"},
+    c2:{title:"Sahkan kuasa router, sambungan WAN dan status rangkaian tempatan"},
+    c3:{title:"Adakah internet berfungsi?",options:["Tidak","Ya"]},
+    c4:{title:"Selesaikan masalah rangkaian atau router"},
+    c5:{title:"Pulihkan sambungan internet"},
+    c6:{title:"Semak kekuatan isyarat WiFi di lokasi inverter"},
+    c7:{title:"Tutup dan buka semula router dan dongle WiFi"},
+    c8:{title:"Konfigurasi semula kelayakan WiFi melalui aplikasi"},
+    c9:{title:"Adakah data dikemas kini pada portal?",options:["Ya","Tidak"]},
+    c_end:{title:"Data dikemas kini secara normal"},
+    c_refer:{title:"Rujuk kepada jurutera"}
+  }
+};
+
+const EMG_MS = {
+  emergency_general: {
+    __label: "Kecemasan Am", __alarms: "Sebarang kemalangan atau kecemasan di tapak",
+    eg1:{title:"Adakah tempat kejadian selamat untuk saya hampiri?",options:["Ya — Selamat","Tidak — Tidak Selamat (kebakaran, wayar hidup, wasap)"]},
+    eg_noentry:{title:"JANGAN MASUK",detail:"Hubungi Perkhidmatan Kecemasan DAHULU. Hubungi juga Kawalan Tapak / Keselamatan."},
+    eg2:{title:"Berhenti kerja",detail:"Jerit minta bantuan / beritahu rakan kerja."},
+    eg3:{title:"Adakah mangsa sedar & bernafas?",options:["Tidak","Ya"]},
+    eg4:{title:"Hubungi Perkhidmatan Kecemasan",detail:"999 / 911 / nombor kecemasan tempatan. Amarankan juga Keselamatan Tapak / Bilik Kawalan."},
+    eg5:{title:"Mulakan CPR jika terlatih",detail:"Gunakan AED jika ada. Teruskan sehingga bantuan tiba."},
+    eg6:{title:"Nilai kecederaan",detail:"Kekalkan mangsa tenang & tidak bergerak."},
+    eg7:{title:"Tahap keterukan?",options:["Ringan — Luka / Lebam","Teruk — Jatuh / Terbakar / Renjatan"]},
+    eg8:{title:"Berikan pertolongan cemas",detail:"Log insiden. Tentukan jika rawatan perubatan lanjut diperlukan."},
+    eg9:{title:"Hubungi Perkhidmatan Kecemasan",detail:"999 / 911 / kecemasan tempatan. JANGAN alihkan mangsa melainkan dalam bahaya."},
+    eg_report:{title:"Laporan insiden",detail:"Maklumkan penyelia / pejabat. Simpan bukti / ambil gambar. Jangan ganggu tempat kejadian melainkan perlu."},
+    eg_closure:{title:"Penutupan tapak",detail:"Hentikan semua kerja untuk hari ini. Sambung semula hanya selepas kelulusan siasatan."}
+  },
+  emergency_shock: {
+    __label: "Renjatan Elektrik / Kilat Arka", __alarms: "Kecederaan renjatan elektrik atau kilat arka",
+    es1:{title:"Adakah mangsa masih bersentuhan dengan sumber hidup?",options:["Ya","Tidak — sudah diasingkan"]},
+    es_notouch:{title:"JANGAN SENTUH MANGSA",detail:"Bukan dengan tangan kosong — anda akan menjadi sebahagian litar."},
+    es_power:{title:"Matikan kuasa",detail:"Di pemutus utama, atau gunakan galah/kayu tidak konduktif untuk menolak mangsa dari sumber."},
+    es_call:{title:"Hubungi Perkhidmatan Kecemasan",detail:"999 / 911 — nyatakan KECEDERAAN ELEKTRIK."},
+    es_breathing:{title:"Adakah mangsa bernafas?",options:["Tidak","Ya"]},
+    es_cpr:{title:"Mulakan CPR segera",detail:"Gunakan AED jika ada. Kebakaran elektrik selalunya menyebabkan serangan jantung."},
+    es_monitor:{title:"Pantau pernafasan & nadi",detail:"Rawat untuk kejutan — pastikan kepanasan badan. Angkat kaki jika tiada kecederaan tulang belakang."},
+    es_continue:{title:"Teruskan sehingga bantuan tiba"},
+    es_inform:{title:"Maklumkan penyelia / pegawai keselamatan",detail:"JANGAN mulakan semula sistem sehingga disiasat sepenuhnya oleh juruelektrik bertauliah."},
+    es_hospital:{title:"Mangsa MESTI ke hospital",detail:"Walaupun rasa sihat — kecederaan dalaman mungkin berlaku."}
+  },
+  emergency_fall: {
+    __label: "Jatuh Dari Ketinggian", __alarms: "Jatuh dari bumbung, tangga, atau perancah",
+    ef1:{title:"Jangan alihkan mangsa",detail:"Melainkan dalam bahaya segera (kebakaran / serpihan jatuh)."},
+    ef2:{title:"Anggap kecederaan tulang belakang",detail:"Sehingga disahkan oleh profesional perubatan."},
+    ef3:{title:"Hubungi Perkhidmatan Kecemasan",detail:"999 / 911 — nyatakan JATUH DARI KETINGGIAN. Berikan lokasi tepat dan butiran akses bumbung."},
+    ef4:{title:"Pastikan mangsa tidak bergerak dan panas badan",detail:"Jangan tanggalkan topi keledar. Semak pernafasan & kesedaran."},
+    ef5:{title:"Bernafas?",options:["Tidak","Ya"]},
+    ef6:{title:"Mulakan CPR",detail:"Kurangkan pergerakan leher — kaedah jaw thrust, JANGAN tundukkan kepala."},
+    ef7:{title:"Tenangkan mangsa",detail:"Kawal sebarang pendarahan yang kelihatan. Kenakan tekanan jika selamat."},
+    ef8:{title:"Teruskan sehingga paramedik tiba",detail:"Mereka akan mengimobilkan tulang belakang."},
+    ef9:{title:"Amankan tempat kejadian",detail:"Ambil gambar titik jatuh. Simpan tangga/peralatan untuk siasatan. Laporkan kepada kawalan tapak segera."}
+  },
+  emergency_fire: {
+    __label: "Kebakaran — Array PV / Inverter / Kotak Penggabung", __alarms: "Kebakaran pada array PV, inverter, atau kotak penggabung",
+    ex1:{title:"Adakah ia kecil, terkawal, dan anda ada alat pemadam Kelas C?",options:["Ya","Tidak — kebakaran membesar"]},
+    ex_evac:{title:"Kosongkan kawasan segera",detail:"Jerit KEBAKARAN — beritahu semua orang."},
+    ex2:{title:"Matikan kuasa",detail:"Putuskan AC dan DC jika selamat dari jarak jauh. Panel PV masih menjana DC di bawah cahaya matahari."},
+    ex3:{title:"Gunakan alat pemadam Kelas C",detail:"Berdiri pada jarak selamat (min 3m). Sasarkan pangkal api. Sapukan sisi ke sisi."},
+    ex4:{title:"Api padam?",options:["Ya","Tidak"]},
+    ex5:{title:"Pantau kawasan untuk penyalaan semula",detail:"JANGAN mulakan semula sistem. Hubungi kawalan tapak & penyelia."},
+    ex6:{title:"Lengkapkan laporan insiden",detail:"JANGAN sentuh peralatan rosak. Tunggu penyiasat kebakaran."},
+    ex_firedept:{title:"Hubungi Jabatan Bomba",detail:"999 / 911 — nyatakan KEBAKARAN PV SOLAR. Maklumkan: Panel PV kekal HIDUP. JANGAN guna air sehingga kuasa disahkan mati."},
+    ex7:{title:"Jangan masuk semula",detail:"Jika asap hadir, jangan masuk semula bangunan. Berjumpa perkhidmatan kecemasan di pintu masuk."}
+  }
+};
+
+const STR_MS = {
+  // Customer Help Articles
+  "Customer Help Articles": "Artikel Bantuan Pelanggan",
+  "Manage help articles visible on the client portal.": "Urus artikel bantuan yang boleh dilihat di portal pelanggan.",
+  "Search articles...": "Cari artikel...",
+  "New Article": "Artikel Baharu",
+  "No articles found.": "Tiada artikel dijumpai.",
+  "Published": "Diterbitkan", "Draft": "Draf",
+  "by": "oleh",
+  "Unpublish": "Nyahterbit", "Publish": "Terbitkan", "Edit": "Sunting", "Delete": "Padam",
+  "Edit Article": "Sunting Artikel",
+  "Title": "Tajuk", "Category": "Kategori", "Status": "Status",
+  "Body (use ## for headings, - for bullet points, **word** for bold)": "Kandungan (guna ## untuk tajuk kecil, - untuk senarai, **perkataan** untuk tebal)",
+  "Done": "Selesai",
+  "General": "Am", "Troubleshooting": "Penyelesaian Masalah", "Billing": "Bil", "Safety": "Keselamatan",
+
+  // Understanding Your TNB Bill
+  "Understanding Your TNB Bill": "Memahami Bil TNB Anda",
+  "A visual, no-jargon breakdown of your bill, tariffs, and NEM credit": "Pecahan visual, tanpa jargon untuk bil, tarif, dan kredit NEM anda",
+  "What Your Bill Shows": "Apa Yang Ditunjukkan Bil Anda",
+  "How much electricity was consumed": "Berapa banyak elektrik digunakan",
+  "The billing period": "Tempoh pengebilan",
+  "The applicable electricity charges": "Caj elektrik yang dikenakan",
+  "The total amount payable": "Jumlah keseluruhan perlu dibayar",
+  "kWh = Electricity Consumption": "kWh = Penggunaan Elektrik",
+  "Your 7 Charges Explained": "7 Caj Anda Diterangkan",
+  "The cost per kWh of electricity you actually use.": "Kos setiap kWh elektrik yang anda gunakan.",
+  "Covers the grid capacity kept available for your home.": "Meliputi kapasiti grid yang disediakan untuk rumah anda.",
+  "Covers the poles and wires that deliver your electricity.": "Meliputi tiang dan wayar yang menghantar elektrik anda.",
+  "A rate that changes monthly based on fuel costs.": "Kadar yang berubah setiap bulan berdasarkan kos bahan api.",
+  "TNB's fixed cost for billing and customer service.": "Kos tetap TNB untuk pengebilan dan perkhidmatan pelanggan.",
+  "8% government tax on usage above the tax-free threshold.": "Cukai kerajaan 8% ke atas penggunaan melebihi had bebas cukai.",
+  "A mandatory 1.6% contribution to the national renewable energy fund.": "Sumbangan wajib 1.6% kepada dana tenaga boleh baharu negara.",
+  "Know Your Bill": "Kenali Bil Anda",
+  "Calculate Your Bill": "Kira Bil Anda",
+
+  // Customer Quick Fix Guide (full translation)
+  "Customer Quick Fix Guide": "Panduan Penyelesaian Pantas Pelanggan",
+  "Important Safety Notice": "Notis Keselamatan Penting",
+  "Do NOT open the inverter cover": "JANGAN buka penutup inverter",
+  "Do NOT touch any cables": "JANGAN sentuh sebarang kabel",
+  "Only perform visual checks and inverter restart": "Hanya lakukan pemeriksaan visual dan mulakan semula inverter",
+  "When to Contact Maintenance Support?": "Bila Perlu Hubungi Sokongan Penyelenggaraan?",
+  "Please contact the maintenance team if:": "Sila hubungi pasukan penyelenggaraan jika:",
+  "The alarm keeps coming back after restart": "Penggera terus berulang selepas dimulakan semula",
+  "The inverter remains OFFLINE": "Inverter kekal LUAR TALIAN",
+  "There is a burning smell or unusual noise": "Terdapat bau hangus atau bunyi luar biasa",
+  "The inverter does not return to normal operation": "Inverter tidak kembali kepada operasi normal",
+  "Applicable Alarms": "Penggera Berkenaan",
+  "What You Can Do": "Apa Yang Anda Boleh Buat",
+  "Restart Guide by Brand": "Panduan Mula Semula Mengikut Jenama",
+  "Reconnection Video by Brand": "Video Sambungan Semula Mengikut Jenama",
+
+  // Section 1: Utility-Related Alarms
+  "Utility-Related Alarms": "Penggera Berkaitan Utiliti",
+  "Utility Loss": "Kehilangan Utiliti", "Grid Power Outage": "Gangguan Kuasa Grid",
+  "Vac Fail": "Kegagalan Vac", "Fac Fail": "Kegagalan Fac",
+  "Grid Overvoltage Protection": "Perlindungan Voltan Lampau Grid", "Grid Phase OV Level 1": "Fasa Grid OV Tahap 1",
+  "Check the main electricity supply in your house or building.": "Semak bekalan elektrik utama di rumah atau bangunan anda.",
+  "Confirm that the lights inside the house/building are ON.": "Sahkan lampu di dalam rumah/bangunan MENYALA.",
+  "Check that the TNB meter is powered ON.": "Semak meter TNB dihidupkan.",
+  "Check the MCB inside the junction box. If it is found tripped, kindly push it back up.": "Semak MCB di dalam kotak penyambung. Jika didapati tersandung, sila tolak semula ke atas.",
+  "Junction Box — check the MCB switches (highlighted)": "Kotak Penyambung — semak suis MCB (ditonjolkan)",
+  "If the MCB is not tripped, wait 5–10 minutes. These alarms usually clear automatically once the grid becomes stable.": "Jika MCB tidak tersandung, tunggu 5–10 minit. Penggera ini biasanya hilang secara automatik apabila grid stabil semula.",
+  "If the alarm is still showing, restart the inverter using the guide for your brand below.": "Jika penggera masih dipaparkan, mulakan semula inverter menggunakan panduan jenama anda di bawah.",
+
+  // Section 2: Insulation
+  "Insulation / Ground-Related Alarms": "Penggera Penebatan / Berkaitan Bumi",
+  "Low Insulation Resistance": "Rintangan Penebatan Rendah", "Ground I Fail": "Kegagalan Arus Bumi",
+  "PE Loss": "Kehilangan PE", "Isolation Fail": "Kegagalan Pengasingan",
+  "Check the weather condition. If there is heavy rain or high humidity, please wait until the weather is dry — many systems recover automatically once conditions return to normal.": "Semak keadaan cuaca. Jika hujan lebat atau kelembapan tinggi, sila tunggu sehingga cuaca kering — kebanyakan sistem pulih secara automatik apabila keadaan kembali normal.",
+  "Perform a visual check only: look for any visible water dripping near the inverter, and check for damaged cables — but do NOT touch anything.": "Lakukan pemeriksaan visual sahaja: perhatikan sebarang air yang menitis berhampiran inverter, dan semak kabel yang rosak — tetapi JANGAN sentuh apa-apa.",
+  "If you see water or damaged cables: do not attempt to repair it yourself. Contact the maintenance team immediately to inspect and fix the issue safely.": "Jika anda nampak air atau kabel rosak: jangan cuba membaikinya sendiri. Hubungi pasukan penyelenggaraan segera untuk memeriksa dan membaiki isu tersebut dengan selamat.",
+
+  // Section 3: Internal/Relay
+  "Internal / Relay-Related Alarms": "Penggera Dalaman / Berkaitan Geganti",
+  "Relay Check Fail": "Kegagalan Semakan Geganti",
+  "Restart the inverter.": "Mulakan semula inverter.",
+  "Check the inverter screen or mobile app to see if the status returns to \"Normal\" or \"Running.\"": "Semak skrin inverter atau aplikasi mudah alih untuk melihat sama ada status kembali kepada \"Normal\" atau \"Running.\"",
+  "Wait for 5 minutes. Some relays may automatically reset after cooling down.": "Tunggu 5 minit. Sesetengah geganti mungkin menetapkan semula secara automatik selepas menyejuk.",
+  "If the alarm appears again, it indicates an internal component issue and maintenance service is required.": "Jika penggera muncul semula, ia menunjukkan isu komponen dalaman dan perkhidmatan penyelenggaraan diperlukan.",
+  "Please take a short video showing the inverter screen to share with us for our team's review.": "Sila rakam video pendek menunjukkan skrin inverter untuk dikongsi dengan kami bagi semakan pasukan kami.",
+  "Inverter LCD Display": "Paparan LCD Inverter",
+
+  // Section 4: Fan/Overheating
+  "Fan / Overheating Alarms": "Penggera Kipas / Terlebih Panas",
+  "External Fan Fail": "Kegagalan Kipas Luaran", "Internal Fan Fail": "Kegagalan Kipas Dalaman",
+  "Stand near the inverter while it is running and listen for the fan — normally, you should hear a light whirring sound when it's operating.": "Berdiri berhampiran inverter semasa ia berjalan dan dengar bunyi kipas — biasanya, anda akan dengar bunyi dengungan ringan semasa ia beroperasi.",
+  "Place your hand near (not touching) the fan air outlet to check if air is being discharged.": "Letakkan tangan anda berhampiran (tanpa menyentuh) alur keluar udara kipas untuk semak sama ada udara sedang dilepaskan.",
+  "Check if there is any visible obstruction or dust blocking the fan.": "Semak sama ada terdapat halangan atau debu yang menyumbat kipas.",
+  "Remove dust from the external surface only, using a dry cloth or soft brush.": "Bersihkan debu dari permukaan luaran sahaja, menggunakan kain kering atau berus lembut.",
+  "If the fan alarm continues, please take a short video showing the inverter screen and the fan, and share it with us.": "Jika penggera kipas berterusan, sila rakam video pendek menunjukkan skrin inverter dan kipas, dan kongsikannya dengan kami.",
+  "The fan is located underneath your inverter (see highlighted area)": "Kipas terletak di bawah inverter anda (lihat kawasan ditonjolkan)",
+
+  // Section 5: WiFi
+  "WiFi Connection Issues": "Isu Sambungan WiFi",
+  "If your inverter is not connecting to WiFi or the monitoring app is offline, please refer to the instructional video for your inverter brand below — it will guide you step by step on how to reconnect your inverter safely.": "Jika inverter anda tidak menyambung ke WiFi atau aplikasi pemantauan luar talian, sila rujuk video arahan untuk jenama inverter anda di bawah — ia akan membimbing anda langkah demi langkah cara menyambung semula inverter anda dengan selamat.",
+  "How These Numbers Are Calculated": "Bagaimana Angka Ini Dikira",
+  "8% × taxable usage subtotal": "8% × subtotal penggunaan bercukai",
+  "1.6% × (Energy + Capacity + Network)": "1.6% × (Tenaga + Kapasiti + Rangkaian)",
+  "Deducted from Energy, Capacity, Network only": "Ditolak daripada Tenaga, Kapasiti, Rangkaian sahaja",
+  "Subtotal + taxes − NEM credit": "Subtotal + cukai − kredit NEM",
+  "How NEM Credit Moves": "Bagaimana Kredit NEM Bergerak",
+  "1,011 kWh exported": "1,011 kWh dieksport",
+  "Solar credit covers usage in full — 3 kWh extra saved for next month": "Kredit solar menampung penggunaan sepenuhnya — 3 kWh lebihan disimpan untuk bulan depan",
+  "708 kWh exported, 1,137 kWh used": "708 kWh dieksport, 1,137 kWh digunakan",
+  "Exported less than used — the shortfall comes out of last month's saved credit first": "Eksport kurang daripada penggunaan — kekurangan diambil daripada kredit simpanan bulan lepas dahulu",
+  "Frequently Asked Questions": "Soalan Lazim",
+  "Will my TNB bill really go to zero?": "Adakah bil TNB saya benar-benar akan menjadi sifar?",
+  "Solar output varies by weather and season, so some months you export more than you use (bill near zero), other months less (higher bill). It's not a fixed number.": "Output solar berbeza mengikut cuaca dan musim, jadi sesetengah bulan anda mengeksport lebih daripada penggunaan (bil hampir sifar), bulan lain kurang (bil lebih tinggi). Ia bukan angka tetap.",
+  "Why do I still pay something even with solar?": "Mengapa saya masih perlu membayar walaupun ada solar?",
+  "Solar credit only offsets Energy, Capacity, and Network charges. Retail Charge, Service Tax, and KWTBB always apply, no matter how much solar you generate.": "Kredit solar hanya menampung Caj Tenaga, Kapasiti, dan Rangkaian. Caj Peruncitan, Cukai Perkhidmatan, dan KWTBB sentiasa dikenakan, tidak kira berapa banyak solar yang dijana.",
+  "Why did my bill suddenly go up this month?": "Mengapa bil saya tiba-tiba naik bulan ini?",
+  "Usually one of: less sunlight that month (haze, monsoon season), higher household usage, or the AFA rate changed — it adjusts monthly.": "Biasanya salah satu daripada: kurang cahaya matahari bulan itu (jerebu, musim tengkujuh), penggunaan isi rumah lebih tinggi, atau kadar AFA berubah — ia diselaraskan setiap bulan.",
+  "My bill shows a negative number — do I get cash back?": "Bil saya menunjukkan angka negatif — adakah saya dapat wang tunai balik?",
+  "No — a negative balance becomes a credit that's deducted from future bills, not a cash refund.": "Tidak — baki negatif menjadi kredit yang ditolak daripada bil akan datang, bukan bayaran balik tunai.",
+  "What happens if I use more electricity than my panels generate?": "Apa berlaku jika saya guna lebih elektrik daripada yang dijana panel saya?",
+  "You simply draw the extra electricity from the grid as normal — TNB bills you for that difference at standard rates, same as before you had solar.": "Anda hanya menarik elektrik tambahan daripada grid seperti biasa — TNB akan mengenakan bil untuk perbezaan itu pada kadar standard, sama seperti sebelum anda ada solar.",
+  "My NEM balance is accumulating, so why is my bill still high this month?": "Baki NEM saya semakin terkumpul, jadi mengapa bil saya masih tinggi bulan ini?",
+  "Your accumulated credit only offsets Energy, Capacity, and Network charges — never Retail, Service Tax, or KWTBB. A high bill usually means you exported less or used more than usual this month, not that your credit disappeared.": "Kredit terkumpul anda hanya menampung Caj Tenaga, Kapasiti, dan Rangkaian — tidak pernah Peruncitan, Cukai Perkhidmatan, atau KWTBB. Bil tinggi biasanya bermaksud anda mengeksport kurang atau menggunakan lebih daripada biasa bulan ini, bukan kredit anda hilang.",
+  "Does my NEM credit expire? What happens if I don't use it?": "Adakah kredit NEM saya luput? Apa berlaku jika saya tidak menggunakannya?",
+  "Yes — NEM credit has an expiry date shown on the bill (e.g., 31.12.2026). Unused credit is forfeited after that date, so it doesn't roll over forever.": "Ya — kredit NEM mempunyai tarikh luput yang ditunjukkan pada bil (cth., 31.12.2026). Kredit yang tidak digunakan akan hangus selepas tarikh itu, jadi ia tidak berterusan selama-lamanya.",
+
+  "Enter your usage and see exactly how your bill is worked out": "Masukkan penggunaan anda dan lihat dengan tepat bagaimana bil anda dikira",
+  "Enter your usage and see exactly how your bill is worked out, using Domestic tariff rates.": "Masukkan penggunaan anda dan lihat dengan tepat bagaimana bil anda dikira, menggunakan kadar tarif Domestik.",
+  "Electricity Used This Month (kWh)": "Elektrik Digunakan Bulan Ini (kWh)",
+  "Solar Exported This Month (kWh)": "Solar Dieksport Bulan Ini (kWh)",
+  "NEM Credit Carried Over (kWh)": "Kredit NEM Dibawa Ke Hadapan (kWh)",
+  "AFA Rate (RM/kWh, optional)": "Kadar AFA (RM/kWh, pilihan)",
+  "Calculate My Bill": "Kira Bil Saya",
+  "Energy Charge": "Caj Tenaga", "Capacity Charge": "Caj Kapasiti", "Network Charge": "Caj Rangkaian",
+  "NEM Credit": "Kredit NEM", "Retail Charge": "Caj Peruncitan",
+  "Flat monthly charge": "Caj bulanan tetap",
+  "Service Tax (8%)": "Cukai Perkhidmatan (8%)",
+  "On usage above 600 kWh": "Ke atas penggunaan melebihi 600 kWh",
+  "Applies above 300 kWh": "Terpakai ke atas 300 kWh",
+  "Estimated Final Bill": "Anggaran Bil Akhir",
+  "This is an estimate for understanding your bill, not an official TNB calculation.": "Ini adalah anggaran untuk memahami bil anda, bukan pengiraan rasmi TNB.",
+  "Still have questions about your bill?": "Masih ada soalan tentang bil anda?",
+  "Want to understand more about your TNB bill?": "Ingin memahami lebih lanjut tentang bil TNB anda?",
+  "Click here": "Klik di sini",
+  "Contact our support team": "Hubungi Pasukan Sokongan Kami",
+  "What is Solar PV?": "Apakah PV Solar?",
+  "The basics — how panels, inverters, and NEM actually work": "Asas-asas — bagaimana panel, inverter, dan NEM sebenarnya berfungsi",
+  "We're happy to walk through your bill with you.": "Kami sedia membantu menerangkan bil anda.",
+  "Look for \"Jumlah Penggunaan Anda\" (kWh) near the top of your detailed bill page.": "Cari \"Jumlah Penggunaan Anda\" (kWh) berhampiran bahagian atas muka bil terperinci anda.",
+  "Find this under \"Maklumat Meter\", the row marked (E) for Eksport — the meter reading table near the bottom of your bill.": "Cari ini di bawah \"Maklumat Meter\", baris bertanda (E) untuk Eksport — jadual bacaan meter berhampiran bahagian bawah bil anda.",
+  "Check your most recent bill — the \"Baki NEM\" figure in the green box on page 1 already shows what carried over from last month, before this month's usage was applied.": "Semak bil terkini anda — angka \"Baki NEM\" dalam kotak hijau pada muka surat 1 sudah menunjukkan baki yang dibawa dari bulan lepas, sebelum penggunaan bulan ini diambil kira.",
+  "Shown next to \"AFA\" under Caj Penjanaan — it changes every month, so check your latest bill.": "Ditunjukkan di sebelah \"AFA\" di bawah Caj Penjanaan — ia berubah setiap bulan, jadi semak bil terkini anda.",
+  // Common UI / actions
+  "Reset": "Tetapkan Semula",
+  "Save to history": "Simpan ke Sejarah",
+  "Copy summary": "Salin Ringkasan",
+  "Continue": "Teruskan",
+  "Back": "Kembali",
+  "Done": "Selesai",
+  "Intern Verified": "Disahkan Pelatih",
+  "Notes": "Nota",
+  "Remarks (optional)": "Catatan (pilihan)",
+  "Finding / notes": "Penemuan / catatan",
+  "Notes / remarks": "Nota / catatan",
+  "OK": "OK",
+  "Not OK": "Tidak OK",
+  "N/A": "T/B",
+  "Troubleshoot →": "Selesaikan Masalah →",
+  "Attach photo": "Lampirkan Gambar",
+  "Retake / change photo": "Ambil Semula / Tukar Gambar",
+
+  // Daily Monitoring header
+  "Daily Monitoring Checklist": "Senarai Semak Pemantauan Harian",
+  "Tap a section to expand it, then tap items to check them off.": "Ketik bahagian untuk kembangkan, kemudian ketik item untuk tandakannya.",
+  "Project / Site": "Projek / Tapak",
+  "Date": "Tarikh",
+  "Time of Check": "Masa Pemeriksaan",
+  "Checked By": "Diperiksa Oleh",
+  "Technician name": "Nama juruteknik",
+
+  // Weather & ESS
+  "Weather & Environmental Context": "Konteks Cuaca & Persekitaran",
+  "Optional context for interpreting today's output readings.": "Konteks pilihan untuk mentafsir bacaan output hari ini.",
+  "Weather Condition": "Keadaan Cuaca",
+  "Irradiance (W/m²)": "Sinaran (W/m²)",
+  "Ambient Temperature (°C)": "Suhu Persekitaran (°C)",
+  "Clear": "Cerah", "Overcast": "Mendung", "Rain": "Hujan", "Storm": "Ribut",
+  "Grid & Battery/Storage Status": "Status Grid & Bateri/Penyimpanan",
+  "Site has ESS": "Tapak Ada ESS",
+  "No ESS on site": "Tiada ESS di Tapak",
+  "No battery/storage fields needed for this site.": "Tiada medan bateri/penyimpanan diperlukan untuk tapak ini.",
+  "Battery State of Charge (%)": "Peratus Cas Bateri (%)",
+  "Battery Health Status": "Status Kesihatan Bateri",
+  "Grid Connection Status": "Status Sambungan Grid",
+  "Good": "Baik", "Fair": "Sederhana", "Poor": "Lemah", "Needs Replacement": "Perlu Diganti", "Critical": "Kritikal",
+  "Connected – Importing": "Bersambung – Mengimport",
+  "Connected – Exporting": "Bersambung – Mengeksport",
+  "Islanded / Off-Grid": "Terpencil / Luar Grid",
+  "Disconnected": "Terputus",
+  "Yes": "Ya", "No": "Tidak",
+
+  // Daily Monitoring sections
+  "Safety & PPE Check": "Semakan Keselamatan & PPE",
+  "PPE confirmed and worn correctly (boots, gloves, safety glasses, hi-vis)": "PPE disahkan dan dipakai dengan betul (but, sarung tangan, cermin mata keselamatan, baju hi-vis)",
+  "Lockout/Tagout (LOTO) status verified before starting work": "Status Lockout/Tagout (LOTO) disahkan sebelum memulakan kerja",
+  "Emergency stop button tested and operational": "Butang berhenti kecemasan diuji dan berfungsi",
+
+  "System Overview & Connectivity": "Gambaran Sistem & Sambungan",
+  "The monitoring platform is accessible without any login or system errors": "Platform pemantauan boleh diakses tanpa sebarang isu log masuk atau sistem",
+  "The data logger is online and reporting live data to the platform": "Data logger dalam talian dan melaporkan data langsung ke platform",
+  "The data timestamp is current with no delay greater than 15 minutes": "Cap masa data adalah terkini dengan kelewatan tidak melebihi 15 minit",
+  "The site internet or WiFi connection is stable and functioning properly": "Sambungan internet atau WiFi tapak stabil dan berfungsi dengan baik",
+
+  "Inverter Operating Status": "Status Operasi Inverter",
+  "All items are running or normal operating status": "Semua item berjalan atau dalam status operasi normal",
+  "No inverters are showing \"Fault\" or \"Off\" status": "Tiada inverter menunjukkan status \"Fault\" atau \"Off\"",
+  "The AC output voltage and frequency reading are within acceptable operating range (260V, 50Hz)": "Bacaan voltan output AC dan frekuensi berada dalam julat operasi yang diterima (260V, 50Hz)",
+  "The DC input voltages from all solar strings are stable with no sudden drops or fluctuations": "Voltan input DC dari semua tali solar stabil tanpa penurunan atau turun naik mendadak",
+  "The inverter internal temperature is within normal operating limits, with no overheating detected": "Suhu dalaman inverter berada dalam had operasi normal, tiada kepanasan berlebihan dikesan",
+
+  "Performance & Energy Generation": "Prestasi & Penjanaan Tenaga",
+  "The daily generation is at least 80% of the forecasted yield for the current weather conditions": "Penjanaan harian sekurang-kurangnya 80% daripada hasil yang dijangka bagi keadaan cuaca semasa",
+  "All string currents are balanced, with no single string showing a deviation greater than 10% from others": "Semua arus tali seimbang, tiada satu tali menunjukkan sisihan melebihi 10% daripada yang lain",
+  "The peak power output (kW) is matching the system's rated capacity during peak sunlight hours": "Output kuasa puncak (kW) sepadan dengan kapasiti terkadar sistem semasa waktu puncak cahaya matahari",
+
+  "Alarms & Faults Review": "Semakan Penggera & Kerosakan",
+  "No Critical Alarms (e.g., Ground Fault, Insulation Fault) are currently active": "Tiada Penggera Kritikal (cth., Kerosakan Bumi, Kerosakan Penebatan) sedang aktif",
+  "No Warning Alarms (e.g., Grid Over-voltage, Comms Fault) are currently active": "Tiada Penggera Amaran (cth., Voltan Grid Berlebihan, Kerosakan Komunikasi) sedang aktif",
+  "No alarms have been recurring multiple times within the same week without resolution": "Tiada penggera berulang beberapa kali dalam minggu yang sama tanpa penyelesaian",
+  "All alarms logged from the previous day have been properly documented and closed": "Semua penggera yang dilog dari hari sebelumnya telah didokumenkan dan ditutup dengan betul",
+
+  "General Site Observations": "Pemerhatian Am Tapak",
+  "PV modules are free from heavy dust, bird droppings, or excessive soiling buildup": "Modul PV bebas daripada debu tebal, tahi burung, atau penumpukan kotoran berlebihan",
+  "No physical damage, cracks, or visible burn marks (hotspots) observed on modules": "Tiada kerosakan fizikal, retak, atau kesan terbakar (hotspot) diperhatikan pada modul",
+  "Array area is free from severe shading caused by overgrown trees, debris, or new structures": "Kawasan array bebas daripada keteduhan teruk disebabkan pokok rimbun, serpihan, atau struktur baharu",
+  "DC/AC cabling, wire trays, and conduits are securely supported with no loose or exposed wires": "Pendawaian DC/AC, dulang wayar, dan saluran disokong dengan kukuh tanpa wayar longgar atau terdedah",
+  "Inverter cooling fans, vents, and heat sinks are clear of dust, debris, and obstructions": "Kipas penyejuk, alur udara, dan penyerap haba inverter bebas daripada debu, serpihan, dan halangan",
+  "Site surrounding area is safe, clean, and free from pest/animal nesting activity or safety hazards": "Kawasan sekitar tapak selamat, bersih, dan bebas daripada aktiviti sarang perosak/haiwan atau bahaya keselamatan",
+
+  // Site Visit Checklist
+  "Site Visit Checklist": "Senarai Semak Lawatan Tapak",
+  "Engineer + intern use. Tap a section to expand it.": "Untuk kegunaan jurutera + pelatih. Ketik bahagian untuk kembangkan.",
+  "Visit Date": "Tarikh Lawatan", "Site Name / ID": "Nama / ID Tapak", "Customer Name": "Nama Pelanggan",
+  "Visit Type": "Jenis Lawatan", "Engineer": "Jurutera", "Intern(s)": "Pelatih",
+  "Job Ticket #": "No. Tiket Kerja", "Visit Start": "Mula Lawatan", "Visit End": "Tamat Lawatan",
+
+  "Pre-Visit": "Pra-Lawatan",
+  "Job sheet / ticket reviewed before departure": "Helaian kerja / tiket disemak sebelum bertolak",
+  "Customer informed of visit time and engineer name": "Pelanggan dimaklumkan tentang masa lawatan dan nama jurutera",
+  "Previous visit notes / history reviewed": "Nota / sejarah lawatan sebelumnya disemak",
+  "Tools and equipment checked and packed": "Alat dan peralatan disemak dan dikemas",
+  "PPE confirmed (safety boots, gloves, helmet if needed)": "PPE disahkan (but keselamatan, sarung tangan, topi keledar jika perlu)",
+  "Site access confirmed (gate code, contact person)": "Akses tapak disahkan (kod pintu pagar, orang hubungan)",
+  "As-built drawing / system diagram available": "Lukisan as-built / gambar rajah sistem tersedia",
+  "Monitoring system pre-checked for live faults": "Sistem pemantauan diperiksa awal untuk kerosakan langsung",
+
+  "Panels & Array": "Panel & Array",
+  "Panel soiling level (Clean / Light / Moderate / Heavy)": "Tahap kekotoran panel (Bersih / Ringan / Sederhana / Teruk)",
+  "Physical damage: cracks, hotspots, delamination visible": "Kerosakan fizikal: retak, hotspot, delaminasi kelihatan",
+  "Bird dropping concentration or shading issues": "Kepekatan tahi burung atau isu keteduhan",
+  "Panel frame corrosion or loose mounting": "Kakisan bingkai panel atau pemasangan longgar",
+  "String layout matches as-built drawing": "Susun atur tali sepadan dengan lukisan as-built",
+
+  "Inverter & Electrical": "Inverter & Elektrik",
+  "Inverter status (Running / Fault / Offline)": "Status inverter (Berjalan / Rosak / Luar Talian)",
+  "Error codes displayed — record all codes seen": "Kod ralat dipaparkan — rekod semua kod yang dilihat",
+  "Inverter ventilation: vents unblocked, no heat damage": "Pengudaraan inverter: alur udara tidak tersumbat, tiada kerosakan haba",
+  "DC isolator condition and labeling": "Keadaan dan pelabelan pemencil DC",
+  "AC isolator condition and correct breaker rating": "Keadaan pemencil AC dan penilaian pemutus litar yang betul",
+  "Cable condition: UV cracking, mechanical damage, unsecured": "Keadaan kabel: retak UV, kerosakan mekanikal, tidak diikat kukuh",
+  "String fuse condition — check each string": "Keadaan fius tali — semak setiap tali",
+
+  "Earthing & Protection": "Pembumian & Perlindungan",
+  "Earth cable continuity: bonding on all frames": "Kesinambungan kabel bumi: ikatan pada semua bingkai",
+  "Earth rod condition (where accessible)": "Keadaan rod bumi (jika boleh diakses)",
+  "SPD (surge protection device) status": "Status SPD (peranti perlindungan lonjakan)",
+
+  "Monitoring & Data": "Pemantauan & Data",
+  "Monitoring system online and reporting": "Sistem pemantauan dalam talian dan melapor",
+  "Generation data matches expected output range": "Data penjanaan sepadan dengan julat output yang dijangka",
+  "Any alarms active in monitoring platform": "Sebarang penggera aktif dalam platform pemantauan",
+
+  "Structural & Site": "Struktur & Tapak",
+  "Roof condition around array (no leaks, cracks)": "Keadaan bumbung sekitar array (tiada kebocoran, retak)",
+  "Racking integrity: no loose bolts, corrosion, shifting": "Integriti rangka: tiada bolt longgar, kakisan, anjakan",
+  "Site security: panels accessible to public / theft risk": "Keselamatan tapak: panel boleh diakses orang awam / risiko kecurian",
+  "Cable trays and conduits properly secured": "Dulang kabel dan saluran diikat dengan betul",
+
+  "Visual": "Visual", "Inverter display": "Paparan inverter", "App/Portal": "Aplikasi/Portal",
+
+  "Post-Visit": "Pasca-Lawatan",
+  "Job sheet completed in full on site before leaving": "Helaian kerja dilengkapkan sepenuhnya di tapak sebelum bertolak",
+  "All defects photographed and labeled correctly": "Semua kecacatan digambar dan dilabel dengan betul",
+  "Customer / site contact informed of findings": "Pelanggan / orang hubungan tapak dimaklumkan tentang penemuan",
+  "Ticket status updated in system (same day)": "Status tiket dikemas kini dalam sistem (hari yang sama)",
+  "Parts or follow-up actions raised with CS team": "Alat ganti atau tindakan susulan dimaklumkan kepada pasukan CS",
+  "Field Report submitted by intern (within 24 hrs)": "Laporan Lapangan dihantar oleh pelatih (dalam 24 jam)",
+  "Replacement / warranty items flagged if applicable": "Item penggantian / waranti ditandakan jika berkenaan",
+
+  "Visit Summary": "Ringkasan Lawatan",
+  "Overall Site Condition": "Keadaan Tapak Keseluruhan",
+  "Action Required?": "Tindakan Diperlukan?",
+  "Follow-Up Visit Required?": "Lawatan Susulan Diperlukan?",
+  "Estimated Resolution Date": "Anggaran Tarikh Penyelesaian",
+  "Engineer Sign-Off": "Pengesahan Jurutera",
+  "Intern Name": "Nama Pelatih",
+
+  // Safety Checklist
+  "Safety Checklist": "Senarai Semak Keselamatan",
+  "Complete before and during every site visit.": "Lengkapkan sebelum dan semasa setiap lawatan tapak.",
+  "Residential Site": "Tapak Kediaman", "Commercial / Industrial": "Komersial / Perindustrian",
+  "Completed By": "Diselesaikan Oleh",
+  "Emergency Contacts": "Kenalan Kecemasan",
+  "(fill in before site visit)": "(isi sebelum lawatan tapak)",
+  "Emergency Services": "Perkhidmatan Kecemasan",
+  "Direct Supervisor": "Penyelia Langsung",
+  "Company Safety Officer": "Pegawai Keselamatan Syarikat",
+  "Nearest Hospital": "Hospital Terdekat",
+  "Client / Homeowner Contact": "Kenalan Pelanggan / Pemilik Rumah",
+
+  "Pre-Site Preparation": "Persediaan Pra-Tapak",
+  "Work Order Reviewed": "Perintah Kerja Disemak",
+  "Site address, system size, access notes, known hazards, visit purpose (monitoring/cleaning)": "Alamat tapak, saiz sistem, nota akses, bahaya diketahui, tujuan lawatan (pemantauan/pembersihan)",
+  "Weather Check": "Semakan Cuaca",
+  "No rain, high wind (>30km/h), lightning, or extreme heat forecast during work hours": "Tiada hujan, angin kencang (>30km/j), kilat, atau ramalan panas melampau semasa waktu kerja",
+  "PPE Packed": "PPE Dikemas",
+  "Safety boots, insulated gloves (rated for DC voltage), cut-resistant gloves (for cleaning), safety glasses, hard hat, hi-vis vest, arc-rated clothing (if required)": "But keselamatan, sarung tangan bertebat (untuk voltan DC), sarung tangan tahan hiris (untuk pembersihan), cermin mata keselamatan, topi keras, baju hi-vis, pakaian tahan arka (jika perlu)",
+  "Tools Checked": "Alat Disemak",
+  "Insulated tools, multimeter/voltage tester (verified working), thermal camera (if monitoring), cleaning equipment (if cleaning)": "Alat bertebat, multimeter/penguji voltan (disahkan berfungsi), kamera terma (jika pemantauan), peralatan pembersihan (jika pembersihan)",
+  "Safety Equipment": "Peralatan Keselamatan",
+  "First aid kit, Class C fire extinguisher (electrical), communication device (phone/radio), fall protection gear (if roof access)": "Kit pertolongan cemas, alat pemadam api Kelas C (elektrik), peranti komunikasi (telefon/radio), peralatan perlindungan jatuh (jika akses bumbung)",
+  "Permits": "Permit",
+  "Site-specific permit to work / risk assessment reviewed and signed (if required)": "Permit kerja khusus tapak / penilaian risiko disemak dan ditandatangani (jika perlu)",
+  "Cleaning-Specific Pre-Check": "Semakan Awal Khusus Pembersihan",
+  "Water source confirmed, soft brush/squeegee with non-conductive handle, water deionizer (if required)": "Sumber air disahkan, berus lembut/squeegee dengan pemegang tidak konduktif, deionizer air (jika perlu)",
+  "Monitoring-Specific Pre-Check": "Semakan Awal Khusus Pemantauan",
+  "System performance baseline data printed/accessible, inverter fault code reference guide, data logging equipment ready": "Data asas prestasi sistem dicetak/boleh diakses, panduan rujukan kod kerosakan inverter, peralatan pengelogan data sedia",
+
+  "On-Site Arrival & General Safety": "Ketibaan Di Tapak & Keselamatan Am",
+  "Report In": "Lapor Diri",
+  "Notify site contact/homeowner or site manager before starting any work": "Maklumkan kenalan tapak/pemilik rumah atau pengurus tapak sebelum memulakan sebarang kerja",
+  "Visual Walk-Around": "Pemeriksaan Visual Sekeliling",
+  "Scan for damaged panels, exposed wiring, water pooling, signs of prior faults, animal/insect activity": "Imbas untuk panel rosak, pendawaian terdedah, takungan air, tanda kerosakan terdahulu, aktiviti haiwan/serangga",
+  "System Status Confirmation": "Pengesahan Status Sistem",
+  "Is the system generating?": "Adakah sistem menjana?",
+  "Locate Disconnects": "Cari Pemutus Sambungan",
+  "Identify main AC and DC disconnects, emergency shutdown procedure, and location": "Kenal pasti pemutus AC dan DC utama, prosedur penutupan kecemasan, dan lokasi",
+  "Emergency Plan": "Pelan Kecemasan",
+  "Identify emergency exits, assembly point, first aid location, and emergency contacts": "Kenal pasti pintu keluar kecemasan, titik perhimpunan, lokasi pertolongan cemas, dan kenalan kecemasan",
+  "Work Zone Control": "Kawalan Zon Kerja",
+  "Set up barricades/warning signs/cones around work area; clear bystanders, children, and pets": "Sediakan barikad/tanda amaran/kon sekeliling kawasan kerja; kosongkan pemerhati, kanak-kanak, dan haiwan peliharaan",
+  "Photo Documentation": "Dokumentasi Foto",
+  "Take \"before\" photos of all areas to be worked on": "Ambil gambar \"sebelum\" bagi semua kawasan yang akan dikerjakan",
+
+  "Electrical Safety": "Keselamatan Elektrik",
+  "Assume All Panels are LIVE": "Anggap Semua Panel HIDUP",
+  "DC cannot be \"switched off\" at the panel while exposed to sunlight": "DC tidak boleh \"dimatikan\" pada panel semasa terdedah kepada cahaya matahari",
+  "Test Before Touch": "Uji Sebelum Sentuh",
+  "Verify de-energization with a meter; do NOT rely on switch position alone": "Sahkan penyahtenagaan dengan meter; JANGAN bergantung pada kedudukan suis sahaja",
+  "Buddy System": "Sistem Rakan",
+  "Never work alone on live electrical components if avoidable": "Jangan bekerja bersendirian pada komponen elektrik hidup jika boleh dielakkan",
+  "One-Hand Rule": "Peraturan Satu Tangan",
+  "Keep one hand in pocket when near live components to reduce shock path through the heart": "Simpan satu tangan dalam poket ketika berhampiran komponen hidup untuk mengurangkan laluan renjatan melalui jantung",
+  "No Jewelry": "Tiada Barang Kemas",
+  "Remove all metallic jewelry, watches, and belts near live conductors": "Tanggalkan semua barang kemas logam, jam tangan, dan tali pinggang berhampiran konduktor hidup",
+  "LOTO Confirmation": "Pengesahan LOTO",
+  "If isolating for cleaning, confirm Lockout-Tagout procedures are followed": "Jika mengasingkan untuk pembersihan, sahkan prosedur Lockout-Tagout dipatuhi",
+  "DC Arc Flash Risk": "Risiko Arka DC",
+  "Be aware: DC arcs are self-sustaining; maintain safe distance when opening/closing live DC connections": "Sedar: arka DC berterusan sendiri; kekalkan jarak selamat semasa membuka/menutup sambungan DC hidup",
+
+  "Homeowner Briefing": "Taklimat Pemilik Rumah",
+  "Confirm awareness of work; verify vehicles/obstacles removed from access path": "Sahkan kesedaran tentang kerja; sahkan kenderaan/halangan dialihkan dari laluan akses",
+  "Attic/Roof Access": "Akses Loteng/Bumbung",
+  "Check stairs, ladders, ceiling hatches for structural safety": "Semak tangga, tangga mudah alih, pintu siling untuk keselamatan struktur",
+  "Ladder Safety": "Keselamatan Tangga Mudah Alih",
+  "Firm ground placement, secured/tied off, extends 1m above roof edge": "Penempatan tanah teguh, diikat kukuh, melebihi 1m di atas tepi bumbung",
+  "Roof Condition": "Keadaan Bumbung",
+  "Inspect tile condition, slope, wet/mossy areas, skylights (fall/fragile-surface risk)": "Periksa keadaan jubin, cerun, kawasan basah/berlumut, tingkap bumbung (risiko jatuh/permukaan rapuh)",
+  "Electrical Panel Access": "Akses Panel Elektrik",
+  "Locate household electrical panel (often inside); ensure clear access": "Cari panel elektrik rumah (selalunya di dalam); pastikan akses jelas",
+  "Pet Awareness": "Kesedaran Haiwan Peliharaan",
+  "Watch for dogs/cats that may be let out unexpectedly into the work area": "Perhatikan anjing/kucing yang mungkin dilepaskan secara tiba-tiba ke kawasan kerja",
+  "Water Access (Cleaning)": "Akses Air (Pembersihan)",
+  "Confirm outdoor tap availability and hose length to reach rooftop": "Sahkan ketersediaan paip luar dan panjang hos untuk mencapai bumbung",
+  "Neighbor Awareness": "Kesedaran Jiran",
+  "Notify adjacent residents if scaffolding or noise will affect them": "Maklumkan penduduk bersebelahan jika perancah atau bunyi akan menjejaskan mereka",
+
+  "Site Induction": "Induksi Tapak",
+  "Sign in at security/reception; complete site induction if first visit": "Daftar masuk di keselamatan/kaunter; lengkapkan induksi tapak jika lawatan pertama",
+  "Additional PPE": "PPE Tambahan",
+  "Wear site-mandated PPE": "Pakai PPE yang diwajibkan tapak",
+  "Site Hazards": "Bahaya Tapak",
+  "Identify forklifts, cranes, overhead cranes, other contractors working simultaneously": "Kenal pasti forklift, kren, kren atas kepala, kontraktor lain bekerja serentak",
+  "LOTO Procedures": "Prosedur LOTO",
+  "Confirm specific Lockout-Tagout procedures for isolating inverters/combiner boxes": "Sahkan prosedur Lockout-Tagout khusus untuk mengasingkan inverter/kotak penggabung",
+  "Confined Spaces": "Ruang Terkurung",
+  "Check for switch rooms, cable trenches (permit required if applicable)": "Semak bilik suis, parit kabel (permit diperlukan jika berkenaan)",
+  "Locate site assembly point, fire extinguishers, and emergency response numbers": "Cari titik perhimpunan tapak, alat pemadam api, dan nombor tindak balas kecemasan",
+  "High Voltage Awareness": "Kesedaran Voltan Tinggi",
+  "Larger systems = higher voltage strings; treat ALL DC lines as live until verified with meter": "Sistem lebih besar = tali voltan lebih tinggi; anggap SEMUA talian DC hidup sehingga disahkan dengan meter",
+  "Roof Access Equipment": "Peralatan Akses Bumbung",
+  "Confirm availability of permanent roof access (ladders, catwalks, guardrails) and their condition": "Sahkan ketersediaan akses bumbung kekal (tangga, catwalk, pagar pengaman) dan keadaannya",
+  "Roof Load Capacity": "Kapasiti Beban Bumbung",
+  "Verify roof can support worker weight + equipment + water weight (cleaning)": "Sahkan bumbung boleh menampung berat pekerja + peralatan + berat air (pembersihan)",
+  "Traffic Management": "Pengurusan Trafik",
+  "Set up traffic cones/barriers if working near vehicle routes or loading bays": "Sediakan kon/penghadang trafik jika bekerja berhampiran laluan kenderaan atau teluk pemunggahan",
+
+  "Panel Cleaning": "Pembersihan Panel",
+  "Cleaning Timing": "Masa Pembersihan",
+  "Perform early morning or late afternoon": "Lakukan awal pagi atau lewat petang",
+  "De-energize (Preferred)": "Nyahtenaga (Digalakkan)",
+  "Confirm system is switched off/de-energized before cleaning (safest method)": "Sahkan sistem dimatikan/dinyahtenagakan sebelum pembersihan (kaedah paling selamat)",
+  "Water & Electricity Warning": "Amaran Air & Elektrik",
+  "If system is live: wet panels + conductive water + pole = severe shock risk": "Jika sistem hidup: panel basah + air konduktif + galah = risiko renjatan teruk",
+  "Non-Conductive Equipment": "Peralatan Tidak Konduktif",
+  "Use fiberglass or insulated poles; avoid metal handles, ladders, or tools": "Gunakan galah gentian kaca atau bertebat; elakkan pemegang logam, tangga, atau alat",
+  "Fall Protection": "Perlindungan Jatuh",
+  "If roof work: use harness, guardrails, or scaffolding; do NOT clean from a ladder": "Jika kerja bumbung: gunakan tali pinggang keledar, pagar pengaman, atau perancah; JANGAN bersihkan dari tangga mudah alih",
+  "Manual Handling": "Pengendalian Manual",
+  "Avoid overexertion lifting heavy water containers; use carts/trolleys": "Elakkan tenaga berlebihan mengangkat bekas air berat; gunakan troli",
+  "Slip Hazard": "Bahaya Tergelincir",
+  "Clean up water spills immediately; wear non-slip footwear": "Bersihkan tumpahan air segera; pakai kasut tidak licin",
+  "Edge Awareness": "Kesedaran Tepi",
+  "Maintain 2m clearance from roof edges; use edge protection where available": "Kekalkan jarak 2m dari tepi bumbung; gunakan perlindungan tepi jika ada",
+  "Panel Damage Check": "Semakan Kerosakan Panel",
+  "Do NOT clean broken/damaged panels; report for repair first": "JANGAN bersihkan panel pecah/rosak; laporkan untuk pembaikan dahulu",
+  "Post-Cleaning Check": "Semakan Selepas Pembersihan",
+  "Inspect for leftover streaks, residue, or dislodged connections": "Periksa kesan tinggalan, sisa, atau sambungan tertanggal",
+
+  "Post-Visit Closeout": "Penutupan Pasca-Lawatan",
+  "Restore System": "Pulihkan Sistem",
+  "Close all covers, panels, disconnects; return to safe operating position": "Tutup semua penutup, panel, pemutus; kembali ke kedudukan operasi selamat",
+  "Final Walkthrough": "Pemeriksaan Akhir",
+  "Check for tools, debris, water spills, or equipment left behind": "Semak alat, serpihan, tumpahan air, atau peralatan yang tertinggal",
+  "Debrief Site Contact": "Taklimat Kenalan Tapak",
+  "Inform client/homeowner/site manager of work done and any follow-up needed": "Maklumkan pelanggan/pemilik rumah/pengurus tapak tentang kerja yang dilakukan dan sebarang susulan diperlukan",
+  "Log Incidents": "Log Insiden",
+  "Record any incidents, near-misses, or observed hazards": "Rekod sebarang insiden, hampir tersalah, atau bahaya yang diperhatikan",
+  "Performance Comparison": "Perbandingan Prestasi",
+  "Reconcile measured values with expected performance; note deviations": "Padankan nilai yang diukur dengan prestasi dijangka; catat sisihan",
+  "Report Submission": "Penyerahan Laporan",
+  "Complete site visit report with photos, findings, and recommendations": "Lengkapkan laporan lawatan tapak dengan gambar, penemuan, dan cadangan",
+  "Photo After": "Gambar Selepas",
+  "Take \"after\" photos of completed work": "Ambil gambar \"selepas\" kerja yang selesai",
+  "Equipment Cleanup": "Pembersihan Peralatan",
+  "Clean and store tools; recharge batteries; restock first aid if used": "Bersihkan dan simpan alat; cas semula bateri; isi semula pertolongan cemas jika digunakan",
+
+  "PROTECT": "LINDUNGI",
+  "Protect yourself first. Do NOT become a second victim. Assess scene safety.": "Lindungi diri anda dahulu. JANGAN menjadi mangsa kedua. Nilai keselamatan tempat kejadian.",
+  "ALERT": "AMARAN",
+  "Alert others. Shout. Call emergency services. Activate site alarm.": "Amarankan orang lain. Jerit. Hubungi perkhidmatan kecemasan. Aktifkan penggera tapak.",
+  "CARE": "JAGA",
+  "Care for the victim. Do not move them unless in immediate danger. Apply first aid if trained.": "Jaga mangsa. Jangan alihkan mereka melainkan dalam bahaya segera. Berikan pertolongan cemas jika terlatih.",
+  "EVACUATE/ESCALATE": "PENGOSONGAN/ESKALASI",
+  "Evacuate area if unsafe. Escalate to supervisor and safety team. Stop all work.": "Kosongkan kawasan jika tidak selamat. Eskalasi kepada penyelia dan pasukan keselamatan. Hentikan semua kerja.",
+  "P.A.C.E. — Emergency Response Protocol": "P.A.C.E. — Protokol Tindak Balas Kecemasan",
+  "Emergency Procedures — Quick Reference": "Prosedur Kecemasan — Rujukan Pantas",
+  "General Emergency": "Kecemasan Am",
+  "Electrical Shock / Arc Flash": "Renjatan Elektrik / Kilat Arka",
+  "Fall From Height": "Jatuh Dari Ketinggian",
+  "Fire": "Kebakaran",
+  "Section": "Bahagian",
+  "In a real emergency, call emergency services first — this guide supports first response, it doesn't replace it.": "Dalam kecemasan sebenar, hubungi perkhidmatan kecemasan dahulu — panduan ini menyokong tindak balas awal, ia tidak menggantikannya.",
+  "Pick what's happening. Each step gives one action or decision to follow immediately.": "Pilih apa yang berlaku. Setiap langkah memberikan satu tindakan atau keputusan untuk diikuti serta-merta.",
+  "Site Safety & PPE Guidelines": "Panduan Keselamatan Tapak & PPE",
+  "General knowledge — not a checklist, just a quick, friendly guide to your gear": "Pengetahuan am — bukan senarai semak, hanya panduan ringkas dan mesra untuk peralatan anda"
+};
+
+const PPE_IMAGES = {
+  hardhat: "kb-assets/ppe-hardhat.jpg",
+  gloves: "kb-assets/ppe-gloves.jpg",
+  boots: "kb-assets/ppe-boots.jpg",
+  harness: "kb-assets/ppe-harness.jpg",
+};
+
+const PPE_IMAGES_2 = {
+  harness2: "kb-assets/ppe-harness2.jpg",
+  arcsuit: "kb-assets/ppe-arcsuit.jpg",
+  vest2: "kb-assets/ppe-vest2.jpg",
+  glasses: "kb-assets/ppe-glasses.jpg",
+};
+
+const PPE_GUIDE = {
+  tagline: "Gear up right, work safe, go home in one piece.",
+  intro: "PPE isn't paperwork — it's the difference between a normal day and an incident report. Here's your gear, in plain terms.",
+  items: [
+    { icon:"hard-hat", color:"#F2994A", title:"Hard Hat / Helmet", tip:"Protects against falling objects and bumps overhead. Wear it near scaffolding, roof access, or any overhead work.", image:PPE_IMAGES.hardhat },
+    { icon:"eye", color:"#6FA8E0", title:"Safety Glasses", tip:"Shields your eyes from dust, debris, and UV glare when handling panels or cutting cable.", image:PPE_IMAGES_2.glasses },
+    { icon:"vest", color:"#F2994A", title:"Hi-Vis Vest", tip:"Makes you visible to vehicles, forklifts, and other workers. Non-negotiable on any active site.", image:PPE_IMAGES_2.vest2 },
+    { icon:"glove", color:"#3DD6A3", title:"Insulated Gloves", tip:"Your first line of defense against shock. Check the voltage rating before the job — not after.", image:PPE_IMAGES.gloves },
+    { icon:"boot", color:"#A8A4BC", title:"Safety Boots", tip:"Steel-toe, slip-resistant boots protect against dropped tools and slippery rooftops.", image:PPE_IMAGES.boots },
+    { icon:"harness", color:"#F0645C", title:"Fall Protection Harness", tip:"Mandatory for roof work above the fall-risk height. Clip in before you climb, not after you slip.", image:PPE_IMAGES_2.harness2 },
+    { icon:"flame", color:"#F0645C", title:"Arc-Rated Clothing", tip:"Worn near live electrical panels to reduce burn injury if an arc flash happens.", image:PPE_IMAGES_2.arcsuit }
+  ],
+  funFactTitle: "Did you know?",
+  funFact: "Unlike a normal AC arc, a DC arc from a solar array doesn't self-extinguish — it can keep burning until the circuit is physically broken. That's exactly why insulated tools and gloves matter more on solar sites than almost anywhere else."
+};
+
+const PPE_GUIDE_MS = {
+  tagline: "Bergear dengan betul, bekerja selamat, pulang dengan selamat.",
+  intro: "PPE bukan kerja kertas — ia perbezaan antara hari biasa dan laporan insiden. Ini peralatan anda, dalam bahasa mudah.",
+  items: [
+    { title:"Topi Keledar Keselamatan", tip:"Melindungi daripada objek jatuh dan hentakan dari atas. Pakai berhampiran perancah, akses bumbung, atau sebarang kerja di atas kepala." },
+    { title:"Cermin Mata Keselamatan", tip:"Melindungi mata anda daripada debu, serpihan, dan silauan UV semasa mengendalikan panel atau memotong kabel." },
+    { title:"Baju Hi-Vis", tip:"Menjadikan anda kelihatan kepada kenderaan, forklift, dan pekerja lain. Wajib di mana-mana tapak aktif." },
+    { title:"Sarung Tangan Bertebat", tip:"Pertahanan pertama anda terhadap renjatan. Semak penilaian voltan sebelum kerja — bukan selepas." },
+    { title:"But Keselamatan", tip:"But hujung keluli, tidak licin melindungi daripada alat yang jatuh dan bumbung licin." },
+    { title:"Tali Pinggang Keledar Perlindungan Jatuh", tip:"Wajib untuk kerja bumbung melebihi ketinggian berisiko jatuh. Sangkutkan sebelum panjat, bukan selepas tergelincir." },
+    { title:"Pakaian Tahan Arka", tip:"Dipakai berhampiran panel elektrik hidup untuk mengurangkan kecederaan terbakar jika berlaku kilat arka." }
+  ],
+  funFactTitle: "Tahukah anda?",
+  funFact: "Berbeza daripada arka AC biasa, arka DC daripada array solar tidak padam sendiri — ia boleh terus terbakar sehingga litar diputuskan secara fizikal. Itulah sebabnya alat dan sarung tangan bertebat lebih penting di tapak solar berbanding hampir semua tempat lain."
+};
+
+const QFG_PROBLEMS = [
+  {icon:'&#9889;', title:'Utility-Related Alarms', flag:'&#128994; You can try this',
+    subtitle:'Covers: Utility Loss, Grid Power Outage, Vac/Fac Fail, Grid Overvoltage',
+    steps:[
+      {text:'Check the main electricity supply in your house or building.', pic:'home'},
+      {text:'Confirm that the lights inside the house/building are ON.', pic:'bulb'},
+      {text:'Check that the TNB meter is powered ON.', pic:'meter'},
+      {text:'Check the MCB inside the junction box. If it is found tripped, kindly push it back up.', pic:'breaker'},
+      {text:'If the MCB is not tripped, wait 5-10 minutes. These alarms usually clear automatically once the grid becomes stable.', pic:'clock'},
+      {text:'If the alarm is still showing, restart the inverter.', pic:'isolator'}
+    ]},
+  {icon:'&#128167;', title:'Insulation / Ground-Related Alarms', flag:'&#128994; Visual check only',
+    subtitle:'Covers: Low Insulation Resistance, Ground I Fail, PE Loss, Isolation Fail',
+    steps:[
+      {text:'Check the weather condition. If there is heavy rain or high humidity, please wait until the weather is dry. Many systems will recover automatically.', pic:'weather'},
+      {text:'Perform a visual check only: Look for any visible water dripping near the inverter, or damaged cables, but do NOT touch anything.', pic:'inspect'},
+      {text:'If you see water or damaged cables: Do not attempt to repair yourself. Contact maintenance team immediately.', pic:'stop'}
+    ]},
+  {icon:'&#128260;', title:'Internal / Relay-Related Alarms', flag:'&#128994; You can try this',
+    subtitle:'Covers: Relay Check Fail',
+    steps:[
+      {text:'Restart the inverter.', pic:'isolator'},
+      {text:'Check the inverter screen or mobile app to see if the status returns to "Normal" or "Running".', pic:'phone'},
+      {text:'Wait for 5 minutes. Some relays may automatically reset after cooling down.', pic:'clock'},
+      {text:'If the alarm appears again, it indicates an internal component issue. Please take a short video showing the inverter screen and share it with us.', pic:'video'}
+    ]},
+  {icon:'&#127788;&#65039;', title:'Fan / Overheating Alarms', flag:'&#128994; You can try this',
+    subtitle:'Covers: External Fan Fail, Internal Fan Fail',
+    steps:[
+      {text:'Stand near the inverter while it is running and listen for the fan. You should hear a light whirring sound.', pic:'sound'},
+      {text:'Place your hand near (not touching) the fan air outlet to check if air is being discharged.', pic:'inspect'},
+      {text:'Check if there are any visible obstruction or dust blocking the fan.', pic:'inspect'},
+      {text:'Remove dust from the external surface only using a dry cloth or soft brush.', pic:'inspect'},
+      {text:'If the fan alarm continues, please take a short video showing the inverter screen and the fan, and share it with us.', pic:'video'}
+    ]},
+  {icon:'&#128246;', title:'WiFi Connection Issues', flag:'&#128994; You can try this',
+    steps:[
+      {text:"If your inverter is not connecting to WiFi or the monitoring app is offline, follow the instructional video for your inverter brand below to reconnect safely.", pic:'wifi'},
+      {links:[
+        {brand:"Huawei",   url:"https://youtu.be/5MKd9_v5DfM?si=NRVpbPnSQcAnHnW4"},
+        {brand:"GoodWe",   url:"https://youtu.be/4PE4VQB-gaQ?si=2etAXVCBw9YgugZI"},
+        {brand:"SMA",      url:"https://youtu.be/1TSjnZvA-7k?si=bqzWETB8Jw3k4xaX"},
+        {brand:"Solis",    url:"https://youtu.be/WJn64St0ckc?si=DSQvIYGcyWjVetS2"},
+        {brand:"Sungrow",  url:"https://drive.google.com/file/d/1FlQI6fuBWviI2B8RkqZ6lIrhuUmQblR/view?usp=sharing"},
+        {brand:"APS",      url:"https://youtu.be/ghanMaah7Ts?si=eh-irDLjAu0tVDOw"}
+      ]}
+    ]},
+  {icon:'&#127780;&#65039;', title:'Low power today', flag:'&#128994; Usually normal',
+    steps:[
+      {text:"Solar panels naturally produce less electricity when it's cloudy, rainy, hazy, or very early/late in the day.", pic:'weather'},
+      {text:'Standing safely on the ground, take a look up at your panels. Leaves, dust, bird droppings, or nearby tree branches can block sunlight and reduce output. Checking from below is enough.', pic:'inspect'}
+    ]}
+];
+
+const QFG_ICONS = {
+  wifi: `<svg viewBox="0 0 130 100" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="14" y="38" width="90" height="30" rx="6"/><path d="M32 38L26 22M92 38L98 22"/><circle cx="30" cy="53" r="1.8" fill="currentColor" stroke="none"/><circle cx="38" cy="53" r="1.8" fill="currentColor" stroke="none"/><circle cx="46" cy="53" r="1.8" fill="currentColor" stroke="none"/><circle cx="88" cy="53" r="2.4" fill="currentColor" stroke="none"/><circle cx="88" cy="53" r="9" stroke-dasharray="2.5 2.5"/><path d="M100 74L92 60" stroke-dasharray="2.5 2.5"/><text x="98" y="86" font-size="11" font-family="monospace" fill="currentColor" stroke="none">RESET</text></svg>`,
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>',
+  breaker: `<svg viewBox="0 0 130 100" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="22" y="10" width="86" height="80" rx="5"/><rect x="34" y="26" width="10" height="22" rx="2"/><rect x="52" y="26" width="10" height="22" rx="2"/><rect x="70" y="22" width="10" height="26" rx="2" fill="currentColor" fill-opacity="0.15"/><rect x="88" y="26" width="10" height="22" rx="2"/><circle cx="75" cy="35" r="13" stroke-dasharray="2.5 2.5"/><path d="M75 60v14M75 74l-5-5M75 74l5-5" stroke-dasharray="2.5 2.5"/><text x="55" y="90" font-size="10" font-family="monospace" fill="currentColor" stroke="none">SOLAR BREAKER</text></svg>`,
+  isolator: `<svg viewBox="0 0 130 100" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="38" y="14" width="54" height="66" rx="5"/><rect x="55" y="52" width="20" height="14" rx="3" fill="currentColor" fill-opacity="0.15"/><text x="47" y="30" font-size="8" font-family="monospace" fill="currentColor" stroke="none">AC ISO</text><circle cx="65" cy="59" r="16" stroke-dasharray="2.5 2.5"/><path d="M100 70l-22-8" stroke-dasharray="2.5 2.5"/><text x="98" y="76" font-size="10" font-family="monospace" fill="currentColor" stroke="none">OFF</text></svg>`,
+  meter: `<svg viewBox="0 0 130 100" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="20" y="20" width="90" height="60" rx="5"/><rect x="32" y="34" width="50" height="20" rx="2"/><text x="36" y="49" font-size="10" font-family="monospace" fill="currentColor" stroke="none">2,008</text><circle cx="95" cy="44" r="4" fill="currentColor" stroke="none"/><path d="M32 64h50" stroke-width="1.3"/></svg>`,
+  bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.9 1 .9 1.6h5.2c0-.6.4-1.2.9-1.6A6 6 0 0 0 12 3z"/></svg>',
+  sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10v4h4l5 4V6L8 10H4z"/><path d="M17 9a4 4 0 0 1 0 6M20 7a7.5 7.5 0 0 1 0 10"/></svg>',
+  weather: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="9" r="3.2"/><path d="M14 17H7a4 4 0 1 1 1.2-7.8"/><path d="M14 17a3.5 3.5 0 0 0 0-7 4 4 0 0 0-.4 0"/></svg>',
+  inspect: `<svg viewBox="0 0 130 100" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="14" y="24" width="80" height="52" rx="3"/><path d="M14 41h80M14 58h80M38 24v52M62 24v52"/><rect x="62" y="24" width="32" height="17" fill="currentColor" fill-opacity="0.22" stroke="none"/><circle cx="78" cy="32" r="15" stroke-dasharray="2.5 2.5"/><path d="M100 55l10 12" stroke-width="2.2"/><circle cx="93" cy="48" r="10"/><text x="8" y="94" font-size="9" font-family="monospace" fill="currentColor" stroke="none">CHECK FOR SHADE/DIRT</text></svg>`,
+  stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 13V7a2 2 0 0 1 4 0v5M12 12V5.5a2 2 0 0 1 4 0V12M16 12.5V8a2 2 0 0 1 4 0v7c0 3.3-2.7 6-6 6h-2c-2 0-3-.6-4.3-2L4 15.5"/></svg>',
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h3l1.5 4.5L8.5 9.5a12 12 0 0 0 6 6l2-2L21 15v3a2 2 0 0 1-2 2c-8 0-15-7-15-15a2 2 0 0 1 2-2z"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3.5v11L15 14"/></svg>'
+};
+
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+
+const UI_I18N = {
+  en: {
+    "ers.title": "Operations & Maintenance",
+    "ers.dashboard": "Dashboard", "ers.dashboard.sub": "Coming soon",
+    "ers.tickets": "Tickets", "ers.tickets.sub": "Coming soon",
+    "ers.calendar": "Calendar", "ers.calendar.sub": "Coming soon",
+    "ers.clients": "Clients & Sites", "ers.clients.sub": "Coming soon",
+    "ers.reports": "Reports", "ers.reports.sub": "Coming soon",
+    "ers.calibration": "Calibration Tracking", "ers.calibration.sub": "Coming soon",
+    "ers.analytics": "Analytics", "ers.analytics.sub": "Coming soon",
+    "ers.knowledge": "Knowledge Base", "ers.knowledge.sub": "Flowcharts & emergency response",
+    "ers.activityLog": "Activity Log", "ers.activityLog.sub": "Coming soon",
+    "ers.users": "Users", "ers.users.sub": "Coming soon",
+    "ers.checklist": "Checklist", "ers.checklist.sub": "Coming soon",
+    "ers.placeholder": "This section isn't built yet — placeholder for now.",
+    "home.title": "Solar O&M Field Guide",
+    "home.subtitle": "Pick a section to get started.",
+    "home.checklists": "Checklists", "home.checklists.desc": "Daily monitoring, site visits & safety",
+    "home.fault": "Fault Guide", "home.fault.desc": "Step-by-step inverter troubleshooting",
+    "home.emergency": "Emergency Procedures",
+    "home.history": "History", "home.history.desc": "Saved checklists & exports",
+    "home.knowledge": "Knowledge Base", "home.knowledge.desc": "Flowcharts & emergency response",
+    "cl.title": "Checklists", "cl.subtitle": "Pick which checklist you need for this visit.",
+    "cl.daily": "Daily Monitoring", "cl.daily.desc": "Routine daily system checks",
+    "cl.siteVisit": "Site Visit Form", "cl.siteVisit.desc": "Engineer + intern field visit checklist",
+    "cl.safety": "Safety Checklist", "cl.safety.desc": "Pre-site, on-site & emergency safety checks",
+    "cl.knowledge": "Knowledge Base", "cl.knowledge.desc": "Reference flowcharts for common alarms",
+    "kb.title": "Knowledge Base",
+    "kb.subtitle": "Reference flowcharts for common alarms, plus emergency response procedures — read-only, no clicking through.",
+    "kb.flowcharts": "Flowcharts",
+    "kb.emergency": "Emergency Response",
+    "kb.general": "General Knowledge",
+    "back.allChecklists": "&larr; All checklists",
+    "back.allReferences": "&larr; All references",
+    "back.ersMenu": "&larr; ERS O&M Menu",
+    "back.menu": "&larr; Menu",
+    "poster.resolved": "Resolved",
+    "poster.refer": "Refer to engineer"
+  },
+  ms: {
+    "ers.title": "Operasi & Penyelenggaraan",
+    "ers.dashboard": "Papan Pemuka", "ers.dashboard.sub": "Akan datang",
+    "ers.tickets": "Tiket", "ers.tickets.sub": "Akan datang",
+    "ers.calendar": "Kalendar", "ers.calendar.sub": "Akan datang",
+    "ers.clients": "Pelanggan & Tapak", "ers.clients.sub": "Akan datang",
+    "ers.reports": "Laporan", "ers.reports.sub": "Akan datang",
+    "ers.calibration": "Penjejakan Penentukuran", "ers.calibration.sub": "Akan datang",
+    "ers.analytics": "Analitik", "ers.analytics.sub": "Akan datang",
+    "ers.knowledge": "Pangkalan Pengetahuan", "ers.knowledge.sub": "Carta alir & tindak balas kecemasan",
+    "ers.activityLog": "Log Aktiviti", "ers.activityLog.sub": "Akan datang",
+    "ers.users": "Pengguna", "ers.users.sub": "Akan datang",
+    "ers.checklist": "Senarai Semak", "ers.checklist.sub": "Akan datang",
+    "ers.placeholder": "Bahagian ini belum dibina — ruang letak buat masa ini.",
+    "home.title": "Panduan Lapangan O&M Solar",
+    "home.subtitle": "Pilih bahagian untuk bermula.",
+    "home.checklists": "Senarai Semak", "home.checklists.desc": "Pemantauan harian, lawatan tapak & keselamatan",
+    "home.fault": "Panduan Kerosakan", "home.fault.desc": "Penyelesaian masalah inverter langkah demi langkah",
+    "home.emergency": "Prosedur Kecemasan",
+    "home.history": "Sejarah", "home.history.desc": "Senarai semak disimpan & eksport",
+    "home.knowledge": "Pangkalan Pengetahuan", "home.knowledge.desc": "Carta alir & tindak balas kecemasan",
+    "cl.title": "Senarai Semak", "cl.subtitle": "Pilih senarai semak yang diperlukan untuk lawatan ini.",
+    "cl.daily": "Pemantauan Harian", "cl.daily.desc": "Pemeriksaan sistem harian rutin",
+    "cl.siteVisit": "Borang Lawatan Tapak", "cl.siteVisit.desc": "Senarai semak lawatan lapangan jurutera + pelatih",
+    "cl.safety": "Senarai Semak Keselamatan", "cl.safety.desc": "Pemeriksaan keselamatan pra-tapak, di tapak & kecemasan",
+    "cl.knowledge": "Pangkalan Pengetahuan", "cl.knowledge.desc": "Carta alir & tindak balas kecemasan",
+    "kb.title": "Pangkalan Pengetahuan",
+    "kb.subtitle": "Carta alir rujukan untuk penggera biasa, serta prosedur tindak balas kecemasan — baca sahaja, tiada klik langkah demi langkah.",
+    "kb.flowcharts": "Carta Alir",
+    "kb.emergency": "Tindak Balas Kecemasan",
+    "kb.general": "Pengetahuan Am",
+    "back.allChecklists": "&larr; Semua senarai semak",
+    "back.allReferences": "&larr; Semua rujukan",
+    "back.ersMenu": "&larr; Menu ERS O&M",
+    "back.menu": "&larr; Menu",
+    "poster.resolved": "Diselesaikan",
+    "poster.refer": "Rujuk kepada jurutera"
+  }
+};
+
+function t(key){ return (UI_I18N[state.lang] && UI_I18N[state.lang][key]) || UI_I18N.en[key] || key; }
+
+function tt(str){ if(state.lang !== 'ms') return str; return STR_MS[str] || str; }
+
+function toggleLang(){ state.lang = state.lang === 'en' ? 'ms' : 'en'; render(); }
+
+function posterOptionIcon(cls){
+  const key = cls === 'yes' ? 'check-circle' : cls === 'no' ? 'x-circle' : 'dot';
+  return `<span class="poster-branch-icon">${EMG_ICONS[key]}</span>`;
+}
+
+function renderPosterNode(nodeId, tree, depth, visited, withIcons){
+  if(withIcons === undefined) withIcons = true;
+  if(!visited) visited = new Set();
+  if(depth > 60) return '';
+  const node = tree.nodes[nodeId];
+  if(!node) return '';
+
+  if(visited.has(nodeId)){
+    // cycle guard: point back to the earlier step instead of re-rendering it
+    return `<div class="poster-card loop">
+      <div class="poster-body">
+        <p class="poster-title">&#8630; Return to: ${esc(node.title)}</p>
+      </div>
+    </div>`;
+  }
+  const seen = new Set(visited);
+  seen.add(nodeId);
+
+  if(node.kind === 'end'){
+    const ok = node.result === 'ok';
+    return `<div class="poster-card end ${ok?'resolved':'danger'}">
+      ${withIcons ? `<div class="poster-icon">${emgIcon(node.icon, ok ? 'first-aid' : 'alert-triangle')}</div>` : ''}
+      <div class="poster-body">
+        <p class="poster-title">${esc(node.title)}</p>
+        <p class="poster-tag">${ok ? esc(t('poster.resolved')) : esc(t('poster.refer'))}</p>
+        ${node.detail ? `<p class="poster-detail">${esc(node.detail)}</p>` : ''}
+        ${node.image ? `<img class="poster-step-image" src="${esc(node.image)}" alt="${esc(node.title)}"/>` : ''}
+      </div>
+    </div>`;
+  }
+
+  if(node.kind === 'action'){
+    return `<div class="poster-card action">
+      ${withIcons ? `<div class="poster-icon">${emgIcon(node.icon, 'alert-triangle')}</div>` : ''}
+      <div class="poster-body">
+        <p class="poster-title">${esc(node.title)}</p>
+        ${node.detail ? `<p class="poster-detail">${esc(node.detail)}</p>` : ''}
+        ${node.image ? `<img class="poster-step-image" src="${esc(node.image)}" alt="${esc(node.title)}"/>` : ''}
+      </div>
+    </div>
+    <div class="poster-arrow">&#8595;</div>
+    ${renderPosterNode(node.next, tree, depth+1, seen, withIcons)}`;
+  }
+
+  // decision — render the question, then each branch as its own labeled, color-coded block
+  let html = `<div class="poster-card decision">
+    ${withIcons ? `<div class="poster-icon">${emgIcon(node.icon, 'search')}</div>` : ''}
+    <div class="poster-body">
+      <p class="poster-title">${esc(node.title)}</p>
+    </div>
+  </div>
+  <div class="poster-branches">`;
+  node.options.forEach(o=>{
+    const cls = o.cls === 'yes' ? 'branch-yes' : o.cls === 'no' ? 'branch-no' : 'branch-other';
+    html += `<div class="poster-branch ${cls}">
+      <div class="poster-branch-label">${posterOptionIcon(o.cls)} ${esc(o.label)}</div>
+      <div class="poster-branch-body">${renderPosterNode(o.next, tree, depth+1, seen, withIcons)}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+
+function renderEmergencyPoster(key){
+  const rawTree = TREES[key];
+  const tree = localizeKbTree(rawTree, EMG_MS[key]);
+  const ms = EMG_MS[key] || {};
+  const label = state.lang === 'ms' && ms.__label ? ms.__label : rawTree.label;
+  return `
+    <div class="poster-header">
+      <div class="poster-header-icon">${emgIcon(rawTree.icon, 'alert-triangle')}</div>
+      <h1>${esc(label)}</h1>
+      ${state.knowledge.previewMode !== 'customer' ? `<div style="display:flex;justify-content:center;">${renderVisibilityFooter(key)}</div>` : ''}
+    </div>
+    <div class="poster-flow">
+      ${renderPosterNode(tree.start, tree, 0)}
+    </div>
+  `;
+}
+
+function kbOpenFlow(key){
+  state.knowledge.activeFlow = key;
+  if(key === 'quick_fix_guide'){ state.knowledge.qfgSearch = ""; state.knowledge.qfgSelected = null; }
+  render();
+}
+
+function kbBack(){ state.knowledge.activeFlow = null; render(); }
+
+const KB_VISIBILITY_META = {
+  internal: { label: "Internal only", short: "Internal", color: "var(--text-dim)", bg: "var(--panel-2)", icon: "&#128274;" },
+  intern_admin: { label: "Interns & Admins only", short: "Intern & Admin", color: "#B67FE0", bg: "#2E2145", icon: "&#127891;" },
+  customer: { label: "Visible to customers", short: "Customer-visible", color: "var(--teal)", bg: "var(--teal-dim)", icon: "&#128100;" },
+  public:   { label: "Public", short: "Public", color: "var(--blue)", bg: "#1B3350", icon: "&#127760;" }
+};
+
+function kbGetVisibility(key){ return state.knowledge.visibility[key] || "internal"; }
+
+function kbOpenVisibilityEditor(evt, key){ evt.stopPropagation(); state.knowledge.editingVisibility = key; render(); }
+
+function kbCloseVisibilityEditor(){ state.knowledge.editingVisibility = null; render(); }
+
+function kbSetVisibility(key, level){ state.knowledge.visibility[key] = level; state.knowledge.editingVisibility = null; render(); }
+
+function kbTogglePreview(){ state.knowledge.previewMode = state.knowledge.previewMode === 'customer' ? 'staff' : 'customer'; render(); }
+
+function renderVisibilityFooter(key){
+  const level = kbGetVisibility(key);
+  const meta = KB_VISIBILITY_META[level];
+  const isStaff = state.knowledge.previewMode !== 'customer';
+  return `<div class="cat-footer">
+    <span class="vis-badge" style="color:${meta.color};background:${meta.bg};">${meta.icon} ${esc(meta.short)}</span>
+    ${isStaff ? `<button class="cat-edit-btn" onclick="kbOpenVisibilityEditor(event,'${key}')" aria-label="Edit who can view this article">&#9998; Edit</button>` : ''}
+  </div>`;
+}
+
+function renderVisibilityEditorModal(){
+  const key = state.knowledge.editingVisibility;
+  if(!key) return '';
+  const current = kbGetVisibility(key);
+  const title = (KB_TREES[key] && KB_TREES[key].label)
+    || (TREES[key] && TREES[key].label)
+    || (key === 'ppe_guide' ? 'Site Safety & PPE Guidelines' : key);
+  const options = ['internal','intern_admin','customer','public'].map(level=>{
+    const meta = KB_VISIBILITY_META[level];
+    const active = level === current;
+    return `<button class="vis-option ${active?'active':''}" onclick="kbSetVisibility('${key}','${level}')">
+      <span class="vis-option-icon" style="color:${meta.color};background:${meta.bg};">${meta.icon}</span>
+      <span class="vis-option-body">
+        <span class="vis-option-label">${esc(meta.label)}</span>
+        <span class="vis-option-desc">${level==='internal' ? 'Only ERS staff can see this article.' : level==='intern_admin' ? 'Only interns and admins can see this article.' : level==='customer' ? 'Staff and your customers can see this article.' : 'Visible to anyone, no login needed.'}</span>
+      </span>
+      ${active ? '<span class="vis-option-check">&#10003;</span>' : ''}
+    </button>`;
+  }).join('');
+  return `<div class="modal-overlay" onclick="kbCloseVisibilityEditor()">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <p class="modal-eyebrow">Who can view this article</p>
+      <h3 class="modal-title">${esc(title)}</h3>
+      <div class="vis-option-list">${options}</div>
+      <button class="modal-close-btn" onclick="kbCloseVisibilityEditor()">Done</button>
+    </div>
+  </div>`;
+}
+
+// ===================================================================
+// Staff Articles (5 Okt) — real, staff-authored articles backed by
+// server.py's /api/kb_articles (persisted in db.json), unlike every guide
+// above which is hardcoded in this file. Jarvis asked for this after
+// reviewing the Knowledge Base: staff (admin/engineer/cs — same roles that
+// get assigned to tickets) can add/edit/publish their own reference
+// articles without a developer touching code. See the server.py changes
+// for the backend half of this (KB_ARTICLE_CATEGORIES, KB_VISIBILITY_LEVELS,
+// action_kb_article_*).
+// ===================================================================
+
+const KB_ARTICLE_CATEGORIES = ["Customer Guides", "General Knowledge", "Intern Resources", "Flowcharts", "Emergency Response"];
+
+// Same 4 levels/order as KB_VISIBILITY_META above (internal/intern_admin/
+// customer/public) — kept identical so a staff article and a built-in guide
+// behave the same way under "Preview as customer".
+const KB_ARTICLE_VISIBILITY_ORDER = ["internal", "intern_admin", "customer", "public"];
+
+async function kbLoadArticles() {
+  try {
+    const { kb_articles } = await api("/api/kb_articles");
+    state.knowledge.articles = kb_articles;
+    state.knowledge.articlesLoaded = true;
+    state.knowledge.articlesError = "";
+  } catch (e) {
+    // Fasa 7 audit pattern (3 Okt) applied here too — a failed fetch shows a
+    // graceful message instead of leaving the section stuck on "Loading…".
+    state.knowledge.articlesError = e.message || "Couldn't load articles.";
+  }
+  render();
+}
+
+function kbOpenArticleView(id) { state.knowledge.activeArticleId = id; render(); }
+function kbCloseArticleView() { state.knowledge.activeArticleId = null; render(); }
+
+function kbOpenNewArticleModal() {
+  state.knowledge.articleForm = {
+    mode: "new", id: null, title: "", category: "Customer Guides", visibility: "internal",
+    body: "", attachments: [], error: "", saving: false,
+  };
+  render();
+}
+
+function kbOpenEditArticleModal(id) {
+  const a = state.knowledge.articles.find(x => x.id === id);
+  if (!a) return;
+  state.knowledge.articleForm = {
+    mode: "edit", id, title: a.title, category: a.category, visibility: a.visibility,
+    body: a.body, attachments: [...a.attachments], error: "", saving: false,
+  };
+  render();
+}
+
+function kbCloseArticleModal() { state.knowledge.articleForm = null; render(); }
+
+// Text/select fields write straight into state WITHOUT calling render() —
+// same pattern as the friend's-file articleTextField() this is adapted
+// from — so typing in the textarea never rebuilds the DOM mid-keystroke
+// (which would throw the cursor to the end of the field every time).
+function kbArticleFormField(key, val) {
+  const f = state.knowledge.articleForm;
+  if (f) f[key] = val;
+}
+
+function kbArticleAddAttachment() {
+  const f = state.knowledge.articleForm;
+  if (!f) return;
+  if (f.attachments.length >= 10) { showToast("A maximum of 10 attachments is allowed."); return; }
+  // Mock upload — same pattern used for report/checklist media elsewhere in
+  // this system (see addMedia() in report.html): no real file capture in
+  // this prototype, a typed label stands in for the file.
+  const label = prompt("File name (this prototype can't store real files — enter a filename to represent it):", "");
+  if (!label || !label.trim()) return;
+  f.attachments.push(label.trim());
+  render();
+}
+
+function kbArticleRemoveAttachment(index) {
+  const f = state.knowledge.articleForm;
+  if (!f) return;
+  f.attachments.splice(index, 1);
+  render();
+}
+
+async function kbSubmitArticleForm() {
+  const f = state.knowledge.articleForm;
+  if (!f || f.saving) return;
+  const title = (f.title || "").trim();
+  if (!title) { f.error = "Article title is required."; render(); return; }
+  f.saving = true;
+  f.error = "";
+  render();
+  try {
+    const payload = {
+      title, category: f.category, visibility: f.visibility, body: f.body || "",
+      attachments: f.attachments, actor: session.name,
+    };
+    if (f.mode === "new") {
+      await api("/api/kb_articles", "POST", payload);
+    } else {
+      await api(`/api/kb_articles/${f.id}/update`, "POST", payload);
+    }
+    state.knowledge.articleForm = null;
+    await kbLoadArticles();
+  } catch (e) {
+    f.saving = false;
+    f.error = e.message;
+    render();
+  }
+}
+
+async function kbToggleArticleStatus(id) {
+  try {
+    await api(`/api/kb_articles/${id}/toggle_status`, "POST", { actor: session.name });
+    await kbLoadArticles();
+  } catch (e) { showToast(e.message); }
+}
+
+async function kbDeleteArticle(id) {
+  if (!confirm("Delete this article? This can't be undone.")) return;
+  try {
+    await api(`/api/kb_articles/${id}/delete`, "POST", { actor: session.name });
+    state.knowledge.activeArticleId = null;
+    await kbLoadArticles();
+  } catch (e) { showToast(e.message); }
+}
+
+// Strips the lightweight markdown markup down to plain text for the card
+// preview blurb — same idea as the friend's-file mdLite() this replaces,
+// just simpler since it only needs to feed a one-line preview, not render.
+function kbArticlePlainPreview(body) {
+  const plain = (body || "")
+    .replace(/^#{2,3}\s*/gm, "")
+    .replace(/^-\s*/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\n+/g, " ")
+    .trim();
+  return plain.length > 140 ? plain.slice(0, 140) + "…" : plain;
+}
+
+// Renders an article's body: "## "/"### " headings, "- " bullets, "**bold**",
+// and a "**Label:** text" line becomes a highlighted callout box (reuses
+// .article-callout, already styled for the hardcoded guides above — see
+// renderEmergencyPoster/renderPpeGuide for other users of that same class).
+function renderKbArticleBody(text) {
+  const lines = (text || "").split("\n");
+  let html = "";
+  let listType = null;
+  function closeList() { if (listType) { html += listType === "ul" ? "</ul>" : "</ol>"; listType = null; } }
+  function inline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
+  lines.forEach(line => {
+    const t = line.trim();
+    const callout = t.match(/^\*\*(.+?):\*\*\s*(.*)$/);
+    if (t.startsWith("### ")) { closeList(); html += `<h4>${inline(t.slice(4))}</h4>`; }
+    else if (t.startsWith("## ")) { closeList(); html += `<h3>${inline(t.slice(3))}</h3>`; }
+    else if (callout) { closeList(); html += `<div class="article-callout"><span>&#9888;</span><div><b>${esc(callout[1])}:</b> ${inline(callout[2])}</div></div>`; }
+    else if (t.startsWith("- ")) { if (listType !== "ul") { closeList(); html += "<ul>"; listType = "ul"; } html += `<li>${inline(t.slice(2))}</li>`; }
+    else if (/^\d+\.\s/.test(t)) { if (listType !== "ol") { closeList(); html += "<ol>"; listType = "ol"; } html += `<li>${inline(t.replace(/^\d+\.\s/, ""))}</li>`; }
+    else if (t === "") { closeList(); }
+    else { closeList(); html += `<p>${inline(t)}</p>`; }
+  });
+  closeList();
+  return html || `<p class="kb-empty-note">No content yet.</p>`;
+}
+
+function renderKbArticleCard(a) {
+  const isStaff = state.knowledge.previewMode !== "customer";
+  // Customer preview: only a published article whose visibility actually
+  // reaches a customer (same hide-rule shape as renderKbCard() above, for
+  // the built-in guides).
+  if (!isStaff && (a.status !== "published" || (a.visibility !== "customer" && a.visibility !== "public"))) return null;
+  const meta = KB_VISIBILITY_META[a.visibility] || KB_VISIBILITY_META.internal;
+  const preview = kbArticlePlainPreview(a.body);
+  return `<div class="cat" style="--cat-color:var(--teal)">
+    <button class="cat-open" onclick="kbOpenArticleView('${a.id}')">
+      <span class="cat-icon" style="color:var(--teal);background:var(--teal-dim);">&#128221;</span>
+      <span class="cat-body">
+        <p class="cat-name">${esc(a.title)}</p>
+        <p class="cat-alarms">${esc(preview || "No content yet.")}</p>
+        <span class="cat-meta-badge" style="color:var(--teal);background:var(--teal-dim);">${esc(a.category)}</span>
+      </span>
+      <span class="cat-arrow">&rarr;</span>
+    </button>
+    <div class="cat-footer">
+      <span class="vis-badge" style="color:${meta.color};background:${meta.bg};">${meta.icon} ${esc(meta.short)}</span>
+      ${isStaff ? `<span class="art-status-badge ${a.status === "published" ? "pub" : "draft"}">&#9679; ${a.status === "published" ? "Published" : "Draft"}</span>` : ""}
+    </div>
+  </div>`;
+}
+
+function renderKbArticleModal() {
+  const f = state.knowledge.articleForm;
+  if (!f) return "";
+  const isNew = f.mode === "new";
+  return `<div class="modal-overlay" onclick="kbCloseArticleModal()">
+    <div class="modal-card kb-article-modal-card" onclick="event.stopPropagation()">
+      <h3 class="modal-title">${isNew ? "New Article" : "Edit Article"}</h3>
+
+      <label class="kb-form-label">Article Title</label>
+      <input type="text" value="${esc(f.title)}" placeholder="e.g. Inverter Error Codes &amp; Troubleshooting Guide"
+        oninput="kbArticleFormField('title', this.value)">
+
+      <div class="field-row" style="margin-top:12px;">
+        <div>
+          <label class="kb-form-label">Category</label>
+          <select onchange="kbArticleFormField('category', this.value)">
+            ${KB_ARTICLE_CATEGORIES.map(c => `<option value="${c}" ${f.category === c ? "selected" : ""}>${c}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label class="kb-form-label">Section (Visibility Scope)</label>
+          <select onchange="kbArticleFormField('visibility', this.value)">
+            ${KB_ARTICLE_VISIBILITY_ORDER.map(level => `<option value="${level}" ${f.visibility === level ? "selected" : ""}>${esc(KB_VISIBILITY_META[level].label)}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+
+      <label class="kb-form-label" style="margin-top:12px;">Content &amp; Instructions</label>
+      <p class="small" style="margin:-2px 0 6px;">## heading, - bullet, **bold**, and <b>Label:</b> text for a highlighted note.</p>
+      <textarea rows="8" placeholder="Write the guide, notes, or instructions here…"
+        oninput="kbArticleFormField('body', this.value)">${esc(f.body)}</textarea>
+
+      <label class="kb-form-label" style="margin-top:12px;">File Attachments <span class="small">(${f.attachments.length}/10 — mock, no real file storage in this prototype)</span></label>
+      <div class="photo-upload-box" onclick="kbArticleAddAttachment()">
+        <div class="photo-upload-icon">&#9729;&#8593;</div>
+        <div class="photo-upload-label">Click to add a file label</div>
+      </div>
+      <div class="photo-chip-list">
+        ${f.attachments.map((name, i) => `<span class="badge badge-type">${esc(name)} <a href="#" onclick="event.preventDefault();kbArticleRemoveAttachment(${i})">&times;</a></span>`).join("")}
+      </div>
+
+      ${f.error ? `<p class="small" style="color:#b91c1c;margin-top:10px;">${esc(f.error)}</p>` : ""}
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
+        <button class="secondary" onclick="kbCloseArticleModal()" ${f.saving ? "disabled" : ""}>Cancel</button>
+        <button onclick="kbSubmitArticleForm()" ${f.saving ? "disabled" : ""}>${f.saving ? "Saving…" : (isNew ? "Create Article" : "Save Changes")}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderKbArticleView(id) {
+  const a = (state.knowledge.articles || []).find(x => x.id === id);
+  if (!a) {
+    return `<button class="back-btn top-back" onclick="kbCloseArticleView()">${t("back.allReferences")}</button><p class="kb-empty-note">Article not found — it may have been deleted.</p>`;
+  }
+  const isStaff = state.knowledge.previewMode !== "customer";
+  const meta = KB_VISIBILITY_META[a.visibility] || KB_VISIBILITY_META.internal;
+  return `
+    <button class="back-btn top-back" onclick="kbCloseArticleView()">${t("back.allReferences")}</button>
+    <h1 style="margin:0 0 8px;">${esc(a.title)}</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+      <span class="vis-badge" style="color:${meta.color};background:${meta.bg};">${meta.icon} ${esc(meta.short)}</span>
+      <span class="cat-meta-badge" style="color:var(--teal);background:var(--teal-dim);">${esc(a.category)}</span>
+      ${isStaff ? `<span class="art-status-badge ${a.status === "published" ? "pub" : "draft"}">&#9679; ${a.status === "published" ? "Published" : "Draft"}</span>` : ""}
+    </div>
+    <div class="article-body">${renderKbArticleBody(a.body)}</div>
+    ${(a.attachments && a.attachments.length) ? `
+      <p class="small" style="margin-top:16px;"><b>Attachments</b></p>
+      <div class="photo-chip-list">${a.attachments.map(f => `<span class="badge badge-type">${esc(f)}</span>`).join("")}</div>
+    ` : ""}
+    ${isStaff ? `
+      <div style="display:flex;gap:10px;margin-top:24px;">
+        <button class="secondary" onclick="kbOpenEditArticleModal('${a.id}')">&#9998; Edit</button>
+        <button class="secondary" onclick="kbToggleArticleStatus('${a.id}')">${a.status === "published" ? "&#128065; Unpublish" : "&#128584; Publish"}</button>
+        <button class="danger" onclick="kbDeleteArticle('${a.id}')">&#128465; Delete</button>
+      </div>
+    ` : ""}
+    ${renderKbArticleModal()}
+  `;
+}
+
+function renderKnowledgeBase(){
+  if(state.knowledge.activeArticleId){
+    return renderKbArticleView(state.knowledge.activeArticleId);
+  }
+  if(state.knowledge.activeFlow){
+    if(state.knowledge.activeFlow === 'ppe_guide'){
+      return `<button class="back-btn top-back" onclick="kbBack()">${t('back.allReferences')}</button>` + renderPpeGuide() + renderVisibilityEditorModal();
+    }
+    if(state.knowledge.activeFlow === 'basic_solar_knowledge'){
+      return `<button class="back-btn top-back" onclick="kbBack()">${t('back.allReferences')}</button>` + renderBasicSolarKnowledge() + renderVisibilityEditorModal();
+    }
+    if(state.knowledge.activeFlow === 'intern_guide'){
+      return `<button class="back-btn top-back" onclick="kbBack()">${t('back.allReferences')}</button>` + renderInternGuide() + renderVisibilityEditorModal();
+    }
+    if(state.knowledge.activeFlow === 'quick_fix_guide'){
+      return `<button class="back-btn top-back" onclick="kbBack()">${t('back.allReferences')}</button>` + renderQuickFixGuide() + renderVisibilityEditorModal();
+    }
+    if(EMERGENCY_TREE_KEYS.includes(state.knowledge.activeFlow)){
+      return `<button class="back-btn top-back" onclick="kbBack()">${t('back.allReferences')}</button>` + renderEmergencyPoster(state.knowledge.activeFlow) + renderVisibilityEditorModal();
+    }
+    return renderKbPoster(state.knowledge.activeFlow) + renderVisibilityEditorModal();
+  }
+  return renderKbHome() + renderVisibilityEditorModal() + renderKbArticleModal();
+}
+
+function renderPpeGuide(){
+  const g = PPE_GUIDE;
+  const gms = PPE_GUIDE_MS;
+  const useMs = state.lang === 'ms';
+  return `
+    <div class="poster-header">
+      <div class="poster-header-icon" style="color:var(--amber);">${EMG_ICONS['hard-hat']}</div>
+      <h1>${tt('Site Safety & PPE Guidelines')}</h1>
+      <p class="ppe-tagline">${useMs ? gms.tagline : g.tagline}</p>
+      ${state.knowledge.previewMode !== 'customer' ? `<div style="display:flex;justify-content:center;">${renderVisibilityFooter('ppe_guide')}</div>` : ''}
+    </div>
+    <p class="sub" style="text-align:center;">${useMs ? gms.intro : g.intro}</p>
+    <div class="ppe-grid">
+      ${g.items.map((it, i)=>{
+        const title = useMs ? gms.items[i].title : it.title;
+        const tip = useMs ? gms.items[i].tip : it.tip;
+        return `<div class="ppe-card" style="--ppe-color:${it.color};">
+          ${it.image ? `<img class="ppe-photo" src="${it.image}" alt="${esc(title)}"/>` : ''}
+          <span class="ppe-icon">${EMG_ICONS[it.icon]}</span>
+          <p class="ppe-title">${esc(title)}</p>
+          <p class="ppe-tip">${esc(tip)}</p>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="ppe-fact">
+      <span class="ppe-fact-icon">&#128161;</span>
+      <div>
+        <p class="ppe-fact-title">${useMs ? gms.funFactTitle : g.funFactTitle}</p>
+        <p class="ppe-fact-text">${useMs ? gms.funFact : g.funFact}</p>
+      </div>
+    </div>
+  `;
+}
+
+function qfgSearch(v){ state.knowledge.qfgSearch = v; render(); }
+
+function qfgOpen(i){ state.knowledge.qfgSelected = i; render(); }
+
+function qfgCloseAnswer(){ state.knowledge.qfgSelected = null; render(); }
+
+function renderQuickFixGuide(){
+  if(state.knowledge.qfgSelected !== null){
+    return renderQfgAnswer(state.knowledge.qfgSelected);
+  }
+
+  const q = state.knowledge.qfgSearch.toLowerCase();
+  const cards = QFG_PROBLEMS.map((p, i) => {
+    const hidden = q.length && !p.title.toLowerCase().includes(q);
+    return `<div class="qfg-card${hidden ? ' hidden' : ''}" onclick="qfgOpen(${i})">
+      <div class="icon">${p.icon}</div>
+      <h4>${esc(tt(p.title))}</h4>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="poster-header">
+      <div class="poster-header-icon" style="color:var(--red);">${EMG_ICONS['alert-triangle']}</div>
+      <h1>${tt('Customer Quick Fix Guide')}</h1>
+      <p class="ppe-tagline">${tt('Safe visual checks & restart steps you can try before calling for help')}</p>
+      ${state.knowledge.previewMode !== 'customer' ? `<div style="display:flex;justify-content:center;">${renderVisibilityFooter('quick_fix_guide')}</div>` : ''}
+    </div>
+
+    <input type="text" class="qfg-search" placeholder="${tt("Search customer issues... (e.g. 'offline' or 'smell')")}" value="${esc(state.knowledge.qfgSearch)}" oninput="qfgSearch(this.value)"/>
+
+    <div class="qfg-grid">${cards}</div>
+  `;
+}
+
+function renderQfgAnswer(i){
+  const p = QFG_PROBLEMS[i];
+  if(!p){ state.knowledge.qfgSelected = null; return renderQuickFixGuide(); }
+
+  const stepsHtml = p.steps.map(s => {
+    if(s.links){
+      const btns = s.links.map(l =>
+        `<a class="qfg-brand-btn" href="${l.url}" target="_blank" rel="noopener">${l.brand}</a>`
+      ).join('');
+      return `<li class="qfg-step-row qfg-step-row--links">
+        <span class="qfg-step-pic">${QFG_ICONS['wifi'] || ''}</span>
+        <span class="qfg-step-text"><div class="qfg-brand-grid">${btns}</div></span>
+      </li>`;
+    }
+    return `
+    <li class="qfg-step-row">
+      <span class="qfg-step-pic">${QFG_ICONS[s.pic] || ''}</span>
+      <span class="qfg-step-text">${esc(tt(s.text))}</span>
+    </li>
+  `;
+  }).join('');
+
+  return `
+    <button class="back-btn" onclick="qfgCloseAnswer()">&larr; ${tt('Back to problems')}</button>
+
+    <div class="qfg-answer-card">
+      <div class="qfg-answer-top">
+        <span class="qfg-flag">${p.flag}</span>
+        <h3 class="qfg-answer-title">${esc(tt(p.title))}</h3>
+      </div>
+      ${p.subtitle ? `<div class="qfg-answer-subtitle">${esc(tt(p.subtitle))}</div>` : ''}
+
+      <ol class="qfg-steps">
+        ${stepsHtml}
+      </ol>
+    </div>
+  `;
+}
+
+function renderBasicSolarKnowledge(){
+  return `
+    <div class="kb-hero">
+      <span class="kb-hero-icon">&#9728;&#65039;</span>
+      <div>
+        <h1>${tt('Basic Solar Knowledge')}</h1>
+        <p class="sub">${tt('Fundamentals of Solar PV Monitoring & Performance Review')}</p>
+      </div>
+    </div>
+    ${state.knowledge.previewMode !== 'customer' ? `<div style="display:flex;justify-content:center;margin-bottom:16px;">${renderVisibilityFooter('basic_solar_knowledge')}</div>` : ''}
+
+    <div class="article-read">
+      <div class="article-body">
+        <h3>&#129300; ${tt('What is a Solar PV System?')}</h3>
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="icon">&#9889;</div>
+            <h4>${tt('Direct Conversion')}</h4>
+            <p>${tt('Converts sunlight directly into electricity using solar panels made of silicon cells.')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#128267;</div>
+            <h4>${tt('Energy Storage')}</h4>
+            <p>${tt('Excess electricity can be securely stored in batteries (energy storage systems) for later use.')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#127757;</div>
+            <h4>${tt('Clean & Renewable')}</h4>
+            <p>${tt('Provides a reliable source of energy while significantly lowering carbon emissions.')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#127981;&#65039;</div>
+            <h4>${tt('Wide Application')}</h4>
+            <p>${tt('Capable of powering homes, commercial buildings, factories, and heavy industries.')}</p>
+          </div>
+        </div>
+
+        <div class="article-callout accent">
+          <div class="icon">&#128161;</div>
+          <div><b>${tt('Key Difference:')}</b> ${tt('Unlike solar thermal systems which heat water, Solar Photovoltaic (PV) systems produce electricity directly from sunlight.')}</div>
+        </div>
+
+        <h3>&#128664; ${tt('The 5-Step Solar Energy Path')}</h3>
+        <div class="path-container">
+          <div class="path-step">
+            <h4><span class="step-num">1</span> ${tt('Solar Irradiation')}</h4>
+            <p>${tt('The "fuel" source; quality heavily depends on irradiance (sunlight intensity) and panel angle.')}</p>
+          </div>
+          <div class="path-step">
+            <h4><span class="step-num">2</span> ${tt('PV Modules')}</h4>
+            <p>${tt('Converts sunlight into raw DC electricity; efficiency is affected by dirt, shade, and extreme heat.')}</p>
+          </div>
+          <div class="path-step">
+            <h4><span class="step-num">3</span> ${tt('Inverter')}</h4>
+            <p>${tt('The "brain". Converts DC to usable AC electricity, optimizes power output, and monitors system health.')}</p>
+          </div>
+          <div class="path-step">
+            <h4><span class="step-num">4</span> ${tt('AC Distribution')}</h4>
+            <p>${tt('Safely routes the generated power and measures the overall energy flow through the building.')}</p>
+          </div>
+          <div class="path-step">
+            <h4><span class="step-num">5</span> ${tt('Grid / Loads')}</h4>
+            <p>${tt('Prioritizes self-use for your appliances; exports any surplus energy for revenue or NEM credits.')}</p>
+          </div>
+        </div>
+
+        <h3>&#9728;&#65039; ${tt('Energy Flow: Photovoltaic Generation (DC Side)')}</h3>
+        <ul class="flow-list dc-flow">
+          <li>
+            <div class="icon">&#127754;</div>
+            <div>
+              <strong>${tt('Photon Absorption')}</strong>
+              <span>${tt('Solar radiation (photons) strikes the p-n junction silicon semiconductor cells in the solar PV modules.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#128268;</div>
+            <div>
+              <strong>${tt('DC Electricity Flow')}</strong>
+              <span>${tt('Loose electrons travel along external series interconnect cables as Direct Current (DC) electricity.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#9939;&#65039;</div>
+            <div>
+              <strong>${tt('String Assembly')}</strong>
+              <span>${tt('Multiple PV modules connected in series form a "String", raising voltage to optimal inverter operating MPPT range.')}</span>
+            </div>
+          </li>
+        </ul>
+
+        <h3>&#128268; ${tt('Energy Flow: Inversion & Grid Integration (AC Side)')}</h3>
+        <ul class="flow-list ac-flow">
+          <li>
+            <div class="icon">&#127919;</div>
+            <div>
+              <strong>${tt('Maximum Power Point Tracking (MPPT)')}</strong>
+              <span>${tt('Dynamically adjusts input impedance to extract peak power output under changing sunlight/cloud conditions.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#128260;</div>
+            <div>
+              <strong>${tt('DC to AC Inversion')}</strong>
+              <span>${tt('The inverter converts variable DC input to synchronized 50Hz AC electricity matching utility grid standards.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#128202;</div>
+            <div>
+              <strong>${tt('Bi-Directional Metering')}</strong>
+              <span>${tt('Measures net energy import from utility vs. excess solar yield exported to the external grid.')}</span>
+            </div>
+          </li>
+        </ul>
+
+        <div class="article-callout">
+          <div class="icon">&#9878;&#65039;</div>
+          <div><b>${tt('Net Energy Metering (NEM):')}</b> ${tt("Unused surplus clean energy is exported to the TNB grid on a 1:1 offset billing mechanism, effectively spinning your meter backwards.")}</div>
+        </div>
+
+        <h3>&#127919; ${tt('Conclusion: Why We Monitor')}</h3>
+        <div class="info-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="info-card">
+            <h4>&#127793; ${tt('Clean Energy Efficiency')}</h4>
+            <p>${tt('Systems provide a sustainable solution that directly powers building electrical loads while exporting surplus generation to the grid.')}</p>
+          </div>
+          <div class="info-card">
+            <h4>&#8987; ${tt('Long-Term System Reliability')}</h4>
+            <p>${tt('Continuous monitoring of inverter health, string parameters, and grid stability mitigates degradation, minimizing costly downtime.')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderInternGuide(){
+  return `
+    <div class="kb-hero">
+      <span class="kb-hero-icon">&#127891;</span>
+      <div>
+        <h1>${tt('O&M Intern Survival Guide')}</h1>
+        <p class="sub">${tt('Welcome to the Operations & Maintenance Team! Here are the unwritten rules and everything you need to succeed.')}</p>
+      </div>
+    </div>
+    ${state.knowledge.previewMode !== 'customer' ? `<div style="display:flex;justify-content:center;margin-bottom:16px;">${renderVisibilityFooter('intern_guide')}</div>` : ''}
+
+    <div class="article-read">
+      <div class="article-body">
+        <h3>&#128736;&#65039; ${tt('Your Role in O&M')}</h3>
+        <p>${tt("As an intern in the Operations & Maintenance (O&M) department, you are here to shadow, learn, and support the team. Our job isn't to build new solar farms\u2014it's to make sure the ones we already built stay online, safe, and generating maximum power.")}</p>
+
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="icon">&#128187;</div>
+            <h4>${tt('Platform Support')}</h4>
+            <p>${tt('Help the engineers by checking customer solar platforms to spot offline inverters or generation issues.')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#129505;</div>
+            <h4>${tt('Shadow & Audit')}</h4>
+            <p>${tt('Shadow senior engineers on site visits. Act as an auditor to observe operations and suggest improvements for the department.')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#128221;</div>
+            <h4>${tt('Reporting')}</h4>
+            <p>${tt("Ease the department's workload by helping engineers draft, compile, and submit Reports after site visits.")}</p>
+          </div>
+        </div>
+
+        <div class="article-callout accent">
+          <div class="icon">&#9888;&#65039;</div>
+          <div><b>${tt('Safety First:')}</b> ${tt('Assume all solar panels are LIVE. DC electricity cannot be "switched off" at the panel while the sun is shining. Never work alone, and always verify Lockout/Tagout (LOTO) status before touching any equipment.')}</div>
+        </div>
+
+        <h3>&#127890; ${tt("What's in Your Bag? (Field Trip Checklist)")}</h3>
+        <p>${tt('Malaysian roofs at 2 PM are no joke. Here is what you actually need to bring when deploying to a site:')}</p>
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="icon">&#129462;</div>
+            <h4>${tt('The Basics')}</h4>
+            <p>${tt('Safety Helmet, Safety Boots, and a Hi-Vis Vest are strictly mandatory. No PPE, no entry.')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#128241;</div>
+            <h4>${tt('Digital Tools')}</h4>
+            <p>${tt('Fully charged smartphone (you will take a LOT of photos for your reports).')}</p>
+          </div>
+          <div class="info-card">
+            <div class="icon">&#128167;</div>
+            <h4>${tt('Survival Gear')}</h4>
+            <p>${tt('A huge water bottle, sunscreen, a cap, and a portable mini fan! Heat exhaustion is a real risk on rooftops.')}</p>
+          </div>
+        </div>
+
+        <h3>&#128214; ${tt('The Solar Jargon Buster')}</h3>
+        <p>${tt('Engineers love acronyms. Here is your quick translation guide:')}</p>
+        <ul class="flow-list ac-flow">
+          <li>
+            <div class="icon">&#128274;</div>
+            <div>
+              <strong>${tt('LOTO (Lockout/Tagout)')}</strong>
+              <span>${tt('A critical safety procedure to ensure equipment is properly shut off and cannot be started up again before maintenance work is completed.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#127919;</div>
+            <div>
+              <strong>${tt('MPPT (Maximum Power Point Tracker)')}</strong>
+              <span>${tt('A component inside the inverter that optimizes the power output from the solar panels as sunlight changes.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#9889;</div>
+            <div>
+              <strong>Voc &amp; Isc</strong>
+              <span>${tt('Voc (Open Circuit Voltage) and Isc (Short Circuit Current). You will measure these constantly during string testing.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#128268;</div>
+            <div>
+              <strong>${tt('DB / SDB')}</strong>
+              <span>${tt('Distribution Board / Sub-Distribution Board. The main electrical panels where the AC power is routed through a building.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#127970;</div>
+            <div>
+              <strong>${tt('TNB & NEM')}</strong>
+              <span>${tt('TNB (Tenaga Nasional Berhad) and NEM (Net Energy Metering). NEM is the billing system that credits customers for exporting solar.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#128267;</div>
+            <div>
+              <strong>${tt('SELCO (Self-Consumption)')}</strong>
+              <span>${tt('A solar setup where all generated power is used strictly by the building, with zero export to the TNB grid.')}</span>
+            </div>
+          </li>
+          <li>
+            <div class="icon">&#127968;</div>
+            <div>
+              <strong>ATAP</strong>
+              <span>${tt('Literally "roof" in Malay! But it actually stands for the Solar Accelerated Transition Action Programme \u2014 the official rooftop solar program in Malaysia that started on Jan 1, 2026, to replace the NEM program.')}</span>
+            </div>
+          </li>
+        </ul>
+
+        <h3>&#127942; ${tt('The Golden Rules of Site Visits')}</h3>
+        <div class="path-container" style="border-left-color: var(--teal);">
+          <div class="path-step">
+            <h4 style="color: var(--teal);"><span class="step-num" style="background: var(--teal-dim); color: var(--teal);">1</span> ${tt('DO take a million photos')}</h4>
+            <p>${tt('You can never have too many photos. Take wide shots, close-ups, and serial numbers. This is for your logbook and memories!')}</p>
+          </div>
+          <div class="path-step">
+            <h4 style="color: var(--teal);"><span class="step-num" style="background: var(--teal-dim); color: var(--teal);">2</span> ${tt("DON'T press buttons without asking")}</h4>
+            <p>${tt("If you don't know exactly what a switch, breaker, or isolator does, keep your hands in your pockets. Always ask the Senior Engineer first.")}</p>
+          </div>
+          <div class="path-step">
+            <h4 style="color: var(--teal);"><span class="step-num" style="background: var(--teal-dim); color: var(--teal);">3</span> ${tt('DO ask "Why?"')}</h4>
+            <p>${tt("The best way to learn how to audit and troubleshoot is to ask the Senior Engineer why they are testing a specific cable. Don't be shy \u2014 knowledge is power and everyone here is friendly.")}</p>
+          </div>
+        </div>
+
+        <h3>&#128279; ${tt('Intern Knowledge Archive')}</h3>
+        <p>${tt('Review what previous interns have learned and done! Check out the Google Drive folder below to see past projects, field reports, and guides.')}</p>
+        <a href="https://drive.google.com/drive/folders/1mqSHWgA-BWNwd6XjxQbVJpyvxNECW7OK" target="_blank" rel="noopener" class="pdf-link-btn" style="background:var(--teal); color:#fff; margin-bottom: 24px;">
+          <span>&#128193; ${tt('Intern Archive: Click here to see past projects & guides!')}</span>
+        </a>
+
+        <div style="text-align: center; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line);">
+          <h2 style="color: var(--amber);">${tt('Wish you luck and have fun here!')} &#127881;</h2>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderKbCard(key, colorVar, iconHtml, name, desc, openFn, metaBadge){
+  const isStaff = state.knowledge.previewMode !== 'customer';
+  const level = kbGetVisibility(key);
+  if(!isStaff && (level === 'internal' || level === 'intern_admin')) return null;
+  return `<div class="cat" style="--cat-color:${colorVar}">
+    <button class="cat-open" onclick="${openFn}">
+      <span class="cat-icon" style="color:${colorVar};background:${colorVar}26;">${iconHtml}</span>
+      <span class="cat-body">
+        <p class="cat-name">${esc(name)}</p>
+        <p class="cat-alarms">${esc(desc)}</p>
+        ${metaBadge ? `<span class="cat-meta-badge" style="color:${colorVar};background:${colorVar}1a;">${esc(metaBadge)}</span>` : ''}
+      </span>
+      <span class="cat-arrow">&rarr;</span>
+    </button>
+    ${renderVisibilityFooter(key)}
+  </div>`;
+}
+
+function renderKbHome(){
+  const kbEntries = Object.entries(KB_TREES);
+  const emgEntries = Object.entries(TREES).filter(([key]) => EMERGENCY_TREE_KEYS.includes(key));
+  const isStaff = state.knowledge.previewMode !== 'customer';
+
+  const kbCardsArr = kbEntries.map(([key, tree]) => {
+    const ms = KB_MS[key] || {};
+    const label = state.lang === 'ms' && ms.__label ? ms.__label : tree.label;
+    const desc = state.lang === 'ms' && ms.__desc ? ms.__desc : tree.desc;
+    return renderKbCard(key, tree.color, emgIcon(tree.icon, 'report'), label, desc, `kbOpenFlow('${key}')`);
+  }).filter(Boolean);
+
+  const emgCardsArr = emgEntries.map(([key, tree]) => {
+    const ms = EMG_MS[key] || {};
+    const label = state.lang === 'ms' && ms.__label ? ms.__label : tree.label;
+    const alarms = state.lang === 'ms' && ms.__alarms ? ms.__alarms : tree.alarms;
+    return renderKbCard(key, '#D9534F', emgIcon(tree.icon, 'alert-triangle'), label, alarms, `kbOpenFlow('${key}')`);
+  }).filter(Boolean);
+
+  const ppeCardHtml = renderKbCard('ppe_guide', '#F2994A', EMG_ICONS['hard-hat'],
+    tt('Site Safety & PPE Guidelines'),
+    tt('General knowledge — not a checklist, just a quick, friendly guide to your gear'),
+    `kbOpenFlow('ppe_guide')`);
+  const ppeCardsArr = ppeCardHtml ? [ppeCardHtml] : [];
+
+  const solarCardHtml = renderKbCard('basic_solar_knowledge', '#5B9BD9', EMG_ICONS['report'],
+    tt('Basic Solar Knowledge'),
+    tt('Fundamentals of Solar PV Monitoring & Performance Review'),
+    `kbOpenFlow('basic_solar_knowledge')`);
+  const solarCardsArr = solarCardHtml ? [solarCardHtml] : [];
+
+  const internCardHtml = renderKbCard('intern_guide', '#B67FE0', EMG_ICONS['report'],
+    tt('O&M Intern Survival Guide'),
+    tt('Welcome to the Operations & Maintenance Team! Here are the unwritten rules and everything you need to succeed.'),
+    `kbOpenFlow('intern_guide')`);
+  const internCardsArr = internCardHtml ? [internCardHtml] : [];
+
+  const qfgCardHtml = renderKbCard('quick_fix_guide', '#D9534F', EMG_ICONS['alert-triangle'],
+    tt('Customer Quick Fix Guide'),
+    tt('Safe visual checks & restart steps a customer can do before calling for help'),
+    `kbOpenFlow('quick_fix_guide')`);
+  const qfgCardsArr = qfgCardHtml ? [qfgCardHtml] : [];
+
+  const totalCount = kbEntries.length + emgEntries.length + 3;
+  const shownCount = kbCardsArr.length + emgCardsArr.length + ppeCardsArr.length + solarCardsArr.length + internCardsArr.length + qfgCardsArr.length;
+  // Fasa 8 audit (5 Okt) — hiddenCount used to only tally the hardcoded guide
+  // trees above; staff-authored articles hidden from the customer preview
+  // (draft, or published but internal-only) weren't counted at all, so this
+  // banner under-reported how many items the customer preview was actually
+  // hiding. renderKbArticleCard() already applies the real hide-rule (not
+  // published, or visibility isn't customer/public) — just reuse it here.
+  const allArticles = state.knowledge.articles || [];
+  const articlesHiddenCount = isStaff ? 0 : allArticles.filter(a =>
+    a.status !== "published" || (a.visibility !== "customer" && a.visibility !== "public")
+  ).length;
+  const hiddenCount = (totalCount - shownCount) + articlesHiddenCount;
+
+  const previewRow = `<div class="kb-preview-row">
+    <span class="kb-preview-label">${isStaff
+      ? 'Staff view — showing every article, whatever its audience.'
+      : `<b>Customer preview</b> — showing only what a customer would see.`}</span>
+    <div class="kb-preview-row-actions">
+      ${isStaff ? `<button class="kb-section-add-btn" onclick="kbOpenNewArticleModal()">+ Add Article</button>` : ''}
+      <button class="kb-preview-btn" onclick="kbTogglePreview()">${isStaff ? '&#128100; Preview as customer' : '&#8617; Back to staff view'}</button>
+    </div>
+  </div>`;
+  const hiddenNote = (!isStaff && hiddenCount > 0)
+    ? `<p class="kb-hidden-note">${hiddenCount} internal-only article${hiddenCount===1?'':'s'} hidden in this preview.</p>` : '';
+  // Staff Articles (5 Okt, moved 5 Okt) — articles no longer get their own
+  // standalone section; each one is filed into whichever existing section
+  // matches its category (see articlesForCategory() + the section grids
+  // below), so this note only covers the fetch state, not a dedicated grid.
+  const articlesNote = (!state.knowledge.articlesLoaded && !state.knowledge.articlesError)
+    ? `<p class="kb-empty-note">Loading articles…</p>`
+    : state.knowledge.articlesError
+      ? `<p class="kb-empty-note">Couldn't load articles — ${esc(state.knowledge.articlesError)}</p>`
+      : '';
+  const articlesForCategory = (cat) => (state.knowledge.articles || [])
+    .filter(a => a.category === cat)
+    .map(renderKbArticleCard)
+    .filter(Boolean);
+
+  const emptyState = (arr) => arr.length ? arr.join('') : `<p class="kb-empty-note">Nothing published to customers here yet.</p>`;
+
+  return `
+    <div class="kb-hero">
+      <span class="kb-hero-icon">&#128218;</span>
+      <div>
+        <h1>${esc(isStaff ? t('kb.title') : (state.lang==='ms' ? 'Pusat Bantuan' : 'Help Center'))}</h1>
+        <p class="sub">${esc(isStaff ? t('kb.subtitle') : (state.lang==='ms' ? 'Panduan ringkas untuk sistem solar anda.' : 'Friendly guides for your solar system.'))}</p>
+      </div>
+    </div>
+    ${previewRow}${hiddenNote}${articlesNote}
+
+    <div class="kb-section-head" style="--kb-sec-color:#D9534F;">
+      <span class="kb-section-icon">&#128295;</span>
+      <span class="kb-section-title">${esc(state.lang==='ms' ? 'Panduan Pelanggan' : 'Customer Guides')}</span>
+    </div>
+    <div class="grid">${emptyState([...qfgCardsArr, ...articlesForCategory('Customer Guides')])}</div>
+
+    <div class="kb-section-head" style="--kb-sec-color:#F2994A;">
+      <span class="kb-section-icon">&#128161;</span>
+      <span class="kb-section-title">${esc(t('kb.general'))}</span>
+    </div>
+    <div class="grid">${emptyState([...solarCardsArr, ...ppeCardsArr, ...articlesForCategory('General Knowledge')])}</div>
+
+    <div class="kb-section-head" style="--kb-sec-color:#B67FE0;">
+      <span class="kb-section-icon">&#127891;</span>
+      <span class="kb-section-title">${esc(state.lang==='ms' ? 'Sumber Intern' : 'Intern Resources')}</span>
+    </div>
+    <div class="grid">${emptyState([...internCardsArr, ...articlesForCategory('Intern Resources')])}</div>
+
+    <div class="kb-section-head" style="--kb-sec-color:#5B9BD9;">
+      <span class="kb-section-icon">&#128218;</span>
+      <span class="kb-section-title">${esc(t('kb.flowcharts'))}</span>
+    </div>
+    <div class="grid">${emptyState([...kbCardsArr, ...articlesForCategory('Flowcharts')])}</div>
+
+    <div class="kb-section-head" style="--kb-sec-color:#D9534F;">
+      <span class="kb-section-icon">&#9888;&#65039;</span>
+      <span class="kb-section-title">${esc(t('kb.emergency'))}</span>
+    </div>
+    <div class="emg-banner">&#9888; ${tt("In a real emergency, call emergency services first — this guide supports first response, it doesn't replace it.")}</div>
+    <div class="grid">${emptyState([...emgCardsArr, ...articlesForCategory('Emergency Response')])}</div>
+  `;
+}
+
+function localizeKbTree(tree, translations){
+  if(state.lang !== 'ms' || !translations) return tree;
+  const cloned = JSON.parse(JSON.stringify(tree));
+  Object.keys(cloned.nodes).forEach(id=>{
+    const tr = translations[id];
+    if(!tr) return;
+    if(tr.title) cloned.nodes[id].title = tr.title;
+    if(tr.detail !== undefined) cloned.nodes[id].detail = tr.detail;
+    if(tr.options && cloned.nodes[id].options){
+      cloned.nodes[id].options.forEach((o, i)=>{ if(tr.options[i]) o.label = tr.options[i]; });
+    }
+  });
+  return cloned;
+}
+
+function renderKbPoster(key){
+  const rawTree = KB_TREES[key];
+  if(!rawTree){ state.knowledge.activeFlow = null; return renderKbHome(); }
+  const tree = localizeKbTree(rawTree, KB_MS[key]);
+  const ms = KB_MS[key] || {};
+  const label = state.lang === 'ms' && ms.__label ? ms.__label : tree.label;
+  const desc = state.lang === 'ms' && ms.__desc ? ms.__desc : tree.desc;
+  return `
+    <button class="back-btn top-back" onclick="kbBack()">${t('back.allReferences')}</button>
+    <div class="poster-header">
+      <div class="poster-header-icon" style="color:${rawTree.color};">${emgIcon(rawTree.icon, 'report')}</div>
+      <h1>${esc(label)}</h1>
+      <p class="sub">${esc(desc)}</p>
+      ${state.knowledge.previewMode !== 'customer' ? `<div style="display:flex;justify-content:center;">${renderVisibilityFooter(key)}</div>` : ''}
+    </div>
+    <div class="poster-flow">
+      ${renderPosterNode(tree.start, tree, 0, new Set(), true)}
+    </div>
+  `;
+}
+
+// Minimal page state — just what the Knowledge Base screens above actually
+// read (state.lang + state.knowledge.*). Everything else that file's global
+// `state` object carried (checklist/site-visit/safety/history/articles) was
+// cut along with those out-of-scope features.
+const state = {
+  lang: "en",
+  knowledge: {
+    activeFlow: null,
+    previewMode: "staff",
+    editingVisibility: null,
+    visibility: {},
+    qfgSearch: "",
+    qfgSelected: null,
+    // Staff Articles (5 Okt) — real, persisted articles (db.json
+    // "kb_articles" via server.py), separate from the hardcoded guide trees
+    // above. articles/articlesLoaded/articlesError are filled by
+    // kbLoadArticles() below; activeArticleId switches the page into the
+    // read view for one article; articleForm holds the in-progress
+    // Add/Edit modal (null = modal closed).
+    articles: [],
+    articlesLoaded: false,
+    articlesError: "",
+    activeArticleId: null,
+    articleForm: null,
+  },
+};
+
+// Replaces the original file's app-wide render() dispatcher (which redrew
+// the whole fake app — checklist, site visit, safety, history, everything)
+// with a small page-local one that only ever redraws this page's own
+// Knowledge Base content, the same "re-render into #pageContent" pattern
+// every other ERS page already uses.
+function render() {
+  document.getElementById("pageContent").innerHTML = `<div class="kb-page">${renderKnowledgeBase()}</div>`;
+}
+
+render();
+kbLoadArticles();
+</script>
+</body>
+</html>

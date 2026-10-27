@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clients &amp; Sites — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "clients", role: session.role, session,
+  pageTitle: "Clients & Sites", pageSubtitle: "Manage clients and their solar installations.",
+});
+
+const STATES = ["Johor","Kedah","Kelantan","Melaka","Negeri Sembilan","Pahang","Penang","Perak",
+  "Perlis","Sabah","Sarawak","Selangor","Terengganu","Kuala Lumpur"];
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div class="tabs" style="margin-bottom:0;">
+        <button class="tab active" data-tab="all" onclick="setFilter('all')">All Clients</button>
+        <button class="tab" data-tab="company" onclick="setFilter('company')">Companies</button>
+        <button class="tab" data-tab="individual" onclick="setFilter('individual')">Individuals</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="secondary" onclick="exportClientsCsv()">&#8681; Export CSV</button>
+        <button onclick="openModal()">+ Add Client</button>
+      </div>
+    </div>
+    <input id="search" type="text" placeholder="Search clients by name, contact, or state…" style="margin-top:10px;">
+    <div id="list"></div>
+  </div>
+
+  <div id="modalOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-dialog">
+      <h2><span id="modalTitle">Add New Client</span><button class="modal-close" onclick="closeModal()">&times;</button></h2>
+      <label>Client Type</label>
+      <div class="radio-row">
+        <label><input type="radio" name="ctype" value="company" checked onchange="updateNameLabel()"> Company</label>
+        <label><input type="radio" name="ctype" value="individual" onchange="updateNameLabel()"> Individual</label>
+      </div>
+      <label id="nameLabel">Company Name</label>
+      <input id="c-name" type="text" placeholder="e.g. Solar Energy Sdn Bhd">
+      <label>Contact Person</label>
+      <input id="c-contact" type="text">
+      <div class="field-row">
+        <div><label>Phone (optional)</label><input id="c-phone" type="text"></div>
+        <div><label>Email (optional)</label><input id="c-email" type="text"></div>
+      </div>
+      <label>Address (optional)</label>
+      <input id="c-address" type="text">
+      <div class="field-row">
+        <div><label>City (optional)</label><input id="c-city" type="text"></div>
+        <div><label>State</label><select id="c-state">${STATES.map(s => `<option${s === "Selangor" ? " selected" : ""}>${s}</option>`).join("")}</select></div>
+        <div><label>Postcode (optional)</label><input id="c-postcode" type="text"></div>
+      </div>
+      <div id="modalError" class="small" style="color:#b91c1c;"></div>
+      <button onclick="submitClient()">Add Client</button>
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+`;
+
+let currentFilter = "all";
+function setFilter(f) {
+  currentFilter = f;
+  ["all", "company", "individual"].forEach(t =>
+    document.querySelector(`.tab[data-tab="${t}"]`).classList.toggle("active", t === f));
+  render();
+}
+document.getElementById("search").addEventListener("input", render);
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #list with the real list exactly as
+// before.
+document.getElementById("list").innerHTML = skeletonRows(3);
+
+function updateNameLabel() {
+  const type = document.querySelector('input[name="ctype"]:checked').value;
+  document.getElementById("nameLabel").textContent = type === "company" ? "Company Name" : "Individual Name";
+}
+function openModal() { document.getElementById("modalOverlay").style.display = "flex"; }
+function closeModal() {
+  document.getElementById("modalOverlay").style.display = "none";
+  document.getElementById("modalError").textContent = "";
+  ["c-name","c-contact","c-phone","c-email","c-address","c-city","c-postcode"].forEach(id => document.getElementById(id).value = "");
+}
+async function submitClient() {
+  const type = document.querySelector('input[name="ctype"]:checked').value;
+  const payload = {
+    type,
+    name: document.getElementById("c-name").value,
+    contact_person: document.getElementById("c-contact").value,
+    phone: document.getElementById("c-phone").value,
+    email: document.getElementById("c-email").value,
+    address: document.getElementById("c-address").value,
+    city: document.getElementById("c-city").value,
+    state: document.getElementById("c-state").value,
+    postcode: document.getElementById("c-postcode").value,
+    actor: session.name,
+  };
+  try {
+    await api("/api/clients", "POST", payload);
+    closeModal();
+    render();
+  } catch (e) {
+    document.getElementById("modalError").textContent = e.message;
+  }
+}
+
+// Shared by render() and exportClientsCsv() so the export always matches
+// whatever tab/search is currently applied on screen — "export what you see".
+async function getFilteredClients() {
+  const { clients } = await api("/api/clients");
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  return clients.filter(c => {
+    if (currentFilter !== "all" && c.type !== currentFilter) return false;
+    if (q && !(c.name.toLowerCase().includes(q) || (c.contact_person || "").toLowerCase().includes(q) || (c.state || "").toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+async function render() {
+  const filtered = await getFilteredClients();
+  const list = document.getElementById("list");
+  list.innerHTML = filtered.length ? filtered.map(clientListRow).join("") : emptyState("No clients match.", "building");
+}
+
+// Exports Client ID, Name, Type, Contact Person, Phone, Email, Address,
+// City, State, Postcode — the fields confirmed for Sheet 1. One row per
+// client currently shown (respects the active tab + search).
+async function exportClientsCsv() {
+  const filtered = await getFilteredClients();
+  if (!filtered.length) { showToast("No clients to export — adjust your filter/search first."); return; }
+  const header = ["Client ID", "Name", "Type", "Contact Person", "Phone", "Email", "Address", "City", "State", "Postcode"];
+  const rows = filtered.map(c => [
+    c.id, c.name, c.type === "company" ? "Company" : "Individual",
+    c.contact_person || "", c.phone || "", c.email || "",
+    c.address || "", c.city || "", c.state || "", c.postcode || "",
+  ]);
+  const today = todayYmd();
+  downloadCsv(`ers-clients-${today}.csv`, [header, ...rows]);
+}
+render();
+setInterval(() => {
+  const active = document.activeElement;
+  if (active && (active.id === "search" || active.closest("#modalOverlay"))) return;
+  render();
+}, 5000);
+</script>
+</body>
+</html>

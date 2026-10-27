@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ticket — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Technician is deliberately excluded — no ticket detail, no communication thread,
+// matching the visibility rule agreed with HOD.
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "tickets", role: session.role, session,
+  pageTitle: "Ticket", pageSubtitle: "Full detail: status, client info, communications, and report.",
+});
+
+const ticketId = getQueryParam("id");
+document.getElementById("pageContent").innerHTML = `
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <a class="back-link" href="${session.role}.html">&larr; Back to Tickets</a>
+    <div id="ticketNav"></div>
+  </div>
+  <div id="detailRoot">${skeletonCards(2)}</div>
+`;
+
+const nav = getTicketNavNeighbors(ticketId);
+document.getElementById("ticketNav").innerHTML = (nav.prev || nav.next) ? `
+  <div style="display:flex;align-items:center;gap:10px;">
+    ${nav.position ? `<span class="small" style="color:var(--muted);">${nav.position} of ${nav.total}</span>` : ""}
+    <button class="secondary" style="padding:6px 14px;font-size:12.5px;" ${nav.prev ? `onclick="location.href='ticket-detail.html?id=${nav.prev}'"` : "disabled"}>&larr; Previous</button>
+    <button class="secondary" style="padding:6px 14px;font-size:12.5px;" ${nav.next ? `onclick="location.href='ticket-detail.html?id=${nav.next}'"` : "disabled"}>Next &rarr;</button>
+  </div>
+` : "";
+
+let allAccounts = [];
+let accountsByName = {};
+let allCalendarEvents = [];
+let pendingLinkIds = []; // events picked in the picker overlay, not yet confirmed
+let pickerMonthCursor = todayYmd();
+let editingDayId = null; // which visit day's people-editor is expanded
+let editingDetails = false;
+
+function err(msg) {
+  const el = document.getElementById("actionError");
+  if (el) el.textContent = msg;
+}
+
+function engineerOptions(selected) {
+  const engineers = allAccounts.filter(a => a.role === "engineer");
+  return `<option value="">Select engineer…</option>` + engineers.map(a =>
+    `<option value="${a.name}"${a.name === selected ? " selected" : ""}>${a.name}</option>`).join("");
+}
+
+function eventLabel(id) {
+  const e = allCalendarEvents.find(x => x.id === id);
+  if (!e) return id;
+  return `${e.title} — ${e.date}${e.end_date !== e.date ? " through " + e.end_date : ""}${e.time ? " " + e.time : ""}`;
+}
+
+function fieldOrDash(v) { return v ? v : "<span style=\"color:var(--muted);\">Not filled in</span>"; }
+
+function renderDetailsFields(t, editable) {
+  if (!editable) {
+    return `
+      <div class="kv-row"><span class="k">Site / Address</span><span class="v">${fieldOrDash(t.site)}</span></div>
+      <div class="kv-row"><span class="k">Panels</span><span class="v">${fieldOrDash(t.equipment.panels)}</span></div>
+      <div class="kv-row"><span class="k">Inverter</span><span class="v">${fieldOrDash([t.equipment.inverter_brand, t.equipment.inverter_model].filter(Boolean).join(" "))}</span></div>
+      <div class="kv-row"><span class="k">NEMCD Ref</span><span class="v">${fieldOrDash(t.equipment.nemcd_ref)}</span></div>
+      <div class="kv-row"><span class="k">DLP End Date</span><span class="v">${fieldOrDash(t.commercial.dlp_end_date)}</span></div>
+      <div class="kv-row"><span class="k">Chargeable Service Call</span><span class="v">${t.commercial.chargeable_service_call ? "Yes" : "No"}</span></div>
+      <div class="kv-row"><span class="k">SO Number</span><span class="v">${fieldOrDash(t.additional.so_number)}</span></div>
+      <div class="kv-row"><span class="k">Premium Care</span><span class="v">${fieldOrDash(t.additional.premium_care_status)}</span></div>
+      <div class="kv-row"><span class="k">System Size</span><span class="v">${fieldOrDash(t.additional.system_size)}</span></div>
+      <div class="kv-row"><span class="k">Assigned Team</span><span class="v">${fieldOrDash(t.additional.assigned_team)}</span></div>
+      <div class="kv-row"><span class="k">Contact Phone</span><span class="v">${fieldOrDash(t.additional.contact_phone)}</span></div>
+      <div class="kv-row"><span class="k">Client Remarks</span><span class="v">${fieldOrDash(t.additional.client_remarks)}</span></div>
+    `;
+  }
+  return `
+    <label>Site / Address</label><input id="det-site" type="text" value="${t.site || ""}">
+    <div class="field-row">
+      <div><label>Panels</label><input id="det-panels" type="text" value="${t.equipment.panels || ""}"></div>
+      <div><label>NEMCD Ref</label><input id="det-nemcd" type="text" value="${t.equipment.nemcd_ref || ""}"></div>
+    </div>
+    <div class="field-row">
+      <div><label>Inverter Brand</label><input id="det-invbrand" type="text" value="${t.equipment.inverter_brand || ""}"></div>
+      <div><label>Inverter Model</label><input id="det-invmodel" type="text" value="${t.equipment.inverter_model || ""}"></div>
+    </div>
+    <div class="field-row">
+      <div><label>DLP End Date</label><input id="det-dlp" type="date" value="${t.commercial.dlp_end_date || ""}"></div>
+      <div><label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:600;color:var(--text);margin-top:22px;">
+        <input id="det-chargeable" type="checkbox" style="width:auto;" ${t.commercial.chargeable_service_call ? "checked" : ""}> Chargeable service call</label></div>
+    </div>
+    <div class="field-row">
+      <div><label>SO Number</label><input id="det-so" type="text" value="${t.additional.so_number || ""}"></div>
+      <div><label>Premium Care Status</label><input id="det-premium" type="text" value="${t.additional.premium_care_status || ""}"></div>
+    </div>
+    <div class="field-row">
+      <div><label>System Size</label><input id="det-size" type="text" value="${t.additional.system_size || ""}"></div>
+      <div><label>Assigned Team</label><input id="det-team" type="text" value="${t.additional.assigned_team || ""}"></div>
+    </div>
+    <label>Contact Phone</label><input id="det-phone" type="text" value="${t.additional.contact_phone || ""}">
+    <label>Client Remarks</label><textarea id="det-remarks" rows="2">${t.additional.client_remarks || ""}</textarea>
+  `;
+}
+function toggleDetailsEdit() { editingDetails = !editingDetails; render(); }
+function saveDetails() {
+  const payload = {
+    site: document.getElementById("det-site").value,
+    equipment: {
+      panels: document.getElementById("det-panels").value,
+      inverter_brand: document.getElementById("det-invbrand").value,
+      inverter_model: document.getElementById("det-invmodel").value,
+      nemcd_ref: document.getElementById("det-nemcd").value,
+    },
+    commercial: {
+      dlp_end_date: document.getElementById("det-dlp").value,
+      chargeable_service_call: document.getElementById("det-chargeable").checked,
+    },
+    additional: {
+      so_number: document.getElementById("det-so").value,
+      premium_care_status: document.getElementById("det-premium").value,
+      system_size: document.getElementById("det-size").value,
+      assigned_team: document.getElementById("det-team").value,
+      contact_phone: document.getElementById("det-phone").value,
+      client_remarks: document.getElementById("det-remarks").value,
+    },
+    actor: session.name,
+  };
+  doAction(ticketId, "update_ticket_details", payload, () => { editingDetails = false; render(); }, err);
+}
+
+function dayStatusBadge(day) {
+  if (day.status === "submitted") return `<span class="badge badge-approved">Submitted</span>`;
+  if (day.status === "unfinished") return `<span class="badge badge-stale">Unfinished</span>`;
+  return `<span class="badge badge-open">Pending</span>`;
+}
+
+function actionLabel(action) {
+  return action.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+function renderEventLog(t) {
+  const events = (t.event_log || []).slice().reverse(); // terbaru di atas
+  if (!events.length) return emptyState("No activity yet.", "clipboard");
+  return events.map(e => {
+    const transition = (e.from && e.to && e.from !== e.to)
+      ? ` — <b>${STATE_LABELS[e.from] || e.from}</b> &rarr; <b>${STATE_LABELS[e.to] || e.to}</b>`
+      : "";
+    return `<div class="event-row">
+      <b>${actionLabel(e.action)}</b>${transition}<br>
+      ${e.actor} &middot; ${fmtTime(e.ts)}${e.note ? ` &middot; ${e.note}` : ""}
+    </div>`;
+  }).join("");
+}
+
+function detailShell(t) {
+  const canSchedule = canDo(session.role, "link_events");
+  const canClose = canDo(session.role, "close");
+  const canEarlyClose = canClose && ["created", "scheduled", "site_visit", "report_drafting", "engineer_review"].includes(t.state);
+  const days = (t.visit_days || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  const linkedEvents = t.calendar_event_ids || [];
+
+  const reportHtml = t.state !== "created" ? `
+    <a href="report.html?id=${t.id}" class="chip-link" style="margin-bottom:6px;">
+      Open Full Report (${t.report.id}) — ${t.report.status === "submitted" ? "Submitted" : t.report.status === "approved" ? "Approved" : "Draft"} &rarr;
+    </a>
+    ${t.report.report_rejections && t.report.report_rejections.length ? `<p class="small" style="color:#991b1b;margin-top:8px;">Last rejection: ${t.report.report_rejections[t.report.report_rejections.length-1].reason}</p>` : ""}
+  ` : `<div class="empty">No report yet — created automatically once the ticket is scheduled.</div>`;
+
+  const messagesHtml = t.messages && t.messages.length
+    ? t.messages.map(m => `<div class="chat-msg"><span class="chat-author">${m.author}</span><span class="chat-ts">${fmtTime(m.ts)}</span>
+        <div class="chat-bubble">${m.text}${(m.mentions || []).length ? `<div class="small" style="margin-top:4px;color:var(--muted);">Mentioned: ${m.mentions.join(", ")}</div>` : ""}</div></div>`).join("")
+    : emptyState("No messages yet.");
+
+  // Who can be @mentioned — same pool as assignable accounts (no technicians,
+  // and no point mentioning yourself).
+  const mentionableAccounts = allAccounts.filter(a => a.role !== "technician" && a.name !== session.name);
+  const mentionCheckboxesHtml = mentionableAccounts.length
+    ? mentionableAccounts.map(a => `<div class="checklist-item"><input type="checkbox" id="mention-${a.id}" value="${a.name}" onchange="updateMentionChips()">
+        <label for="mention-${a.id}" style="text-transform:none;font-weight:500;color:var(--text);margin:0;">${a.name}</label></div>`).join("")
+    : emptyState("No one else to mention.", "users");
+
+  const assignableAccounts = allAccounts.filter(a => a.role !== "technician" && !t.assignees.includes(a.name));
+  const assigneeCheckboxesHtml = assignableAccounts.length
+    ? assignableAccounts.map(a => `<div class="checklist-item"><input type="checkbox" id="add-assignee-${a.id}" value="${a.name}">
+        <label for="add-assignee-${a.id}" style="text-transform:none;font-weight:500;color:var(--text);margin:0;">${a.name}</label></div>`).join("")
+    : emptyState("Everyone eligible is already assigned.", "users");
+
+  const linkedEventsHtml = linkedEvents.length ? linkedEvents.map(id => `
+    <span class="chip-link" style="background:var(--content-bg);color:var(--text);border:1px solid var(--border);margin:0 6px 6px 0;">
+      ${eventLabel(id)} ${canSchedule ? `<span style="cursor:pointer;margin-left:6px;" onclick="removeLinkedEvent('${id}')">&times;</span>` : ""}
+    </span>
+  `).join("") : emptyState("No calendar events linked yet.", "calendar");
+
+  const dayRowsHtml = days.map(day => `
+    <div class="ticket-block">
+      <div class="ticket-title">${day.date} ${dayStatusBadge(day)}</div>
+      <p class="small">Engineer: ${day.engineer || "—"} · Technicians: ${(day.technicians || []).join(", ") || (day.engineer ? "none (engineer only)" : "—")}${teamLabelForTechnicians(day.technicians, accountsByName) ? ` <b>(${teamLabelForTechnicians(day.technicians, accountsByName)})</b>` : ""}</p>
+      ${editingDayId === day.id ? `
+        <label>Engineer</label><select id="dayEngineer-${day.id}">${engineerOptions(day.engineer)}</select>
+        <label>Technicians (leave empty if the engineer goes alone)</label>
+        <div class="checklist-box">${technicianCheckboxList(allAccounts, day.technicians, "day-tech-" + day.id)}</div>
+        <button onclick="saveDayPeople(${day.id})">Save</button>
+        <button class="secondary" onclick="toggleDayEdit(${day.id})">Cancel</button>
+      ` : `${canSchedule ? `<button class="secondary" onclick="toggleDayEdit(${day.id})">Edit people</button>` : ""}
+        <a class="chip-link" href="checklist.html?id=${t.id}&day=${day.id}" style="margin-left:6px;">View Checklist &rarr;</a>`}
+    </div>
+  `).join("");
+
+  const schedulingFieldsHtml = t.state === "created" ? `
+    <label>Engineer</label><select id="schedEngineer">${engineerOptions("")}</select>
+    <label>Technicians (for the day(s) you're about to link) — leave empty if the engineer goes alone</label>
+    <div class="checklist-box">${technicianCheckboxList(allAccounts, [], "sched-tech")}</div>
+  ` : `
+    <p class="small">New days default to <b>${t.default_engineer || "—"}</b> as engineer — edit any day's people below once linked.</p>
+    <label>Technicians (for the day(s) you're about to link) — leave empty if the engineer goes alone</label>
+    <div class="checklist-box">${technicianCheckboxList(allAccounts, [], "sched-tech")}</div>
+  `;
+
+  return `
+    <div class="card">
+      <div class="detail-header">
+        <div>
+          <div class="list-row-id">${t.id}</div>
+          <h2>${t.title}</h2>
+          <div class="ticket-meta">${t.client} · ${TYPE_LABELS[t.type] || t.type}</div>
+        </div>
+        <div>
+          ${priorityBadge(t)}
+          <span class="badge badge-type">${TYPE_LABELS[t.type] || t.type}</span>
+          <span class="${badgeClass(t)}">${simpleStatus(t)}</span>
+          ${t.snooze_until ? `<div class="small" style="margin-top:4px;">Snoozed until ${t.snooze_until}</div>` : ""}
+        </div>
+      </div>
+      ${renderProgressBar(t, session)}
+    </div>
+
+    <div class="detail-grid">
+      <div>
+        <div class="card">
+          <h2>Description</h2>
+          <p class="small" style="font-size:13px;color:var(--text);">${t.description}</p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h2 style="margin:0;">Job &amp; Equipment Details</h2>
+            <button class="secondary" onclick="toggleDetailsEdit()">${editingDetails ? "Cancel" : "Edit"}</button>
+          </div>
+          ${renderDetailsFields(t, editingDetails)}
+          ${editingDetails ? `<button onclick="saveDetails()" style="margin-top:8px;">Save</button>` : ""}
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h2 style="margin:0;">Communications &amp; discussion</h2>
+            <button class="secondary" onclick="toggleMentionPanel()">+ Mention</button>
+          </div>
+          <div class="chat-list">${messagesHtml}</div>
+          <div id="mentionPanel" style="display:none;margin:10px 0;">
+            <p class="small">Notify (mock email — no real email in this demo):</p>
+            <div class="checklist-box">${mentionCheckboxesHtml}</div>
+          </div>
+          <div id="mentionChips" style="margin:6px 0;display:flex;flex-wrap:wrap;gap:6px;"></div>
+          <div class="chat-input-row">
+            <input id="chatInput" type="text" placeholder="Message CS, Engineer or HOD on this ticket…">
+            <button onclick="sendMessage()">Send</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Report</h2>
+          ${reportHtml}
+        </div>
+
+        <div class="card">
+          <h2>Activity &amp; History</h2>
+          <div class="chat-list">${renderEventLog(t)}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>Client details</h2>
+          <div class="kv-row"><span class="k">Client</span><span class="v">${t.client}</span></div>
+          <div class="kv-row"><span class="k">Ticket type</span><span class="v">${TYPE_LABELS[t.type] || t.type}</span></div>
+          <div class="kv-row"><span class="k">Created</span><span class="v">${fmtTime(t.created_at)}</span></div>
+        </div>
+
+        <div class="card">
+          <h2>Site Visit</h2>
+          <div id="actionError" class="small" style="color:#b91c1c;"></div>
+          <label>Linked Calendar Events</label>
+          <div style="margin-bottom:8px;">${linkedEventsHtml}</div>
+          ${t.state !== "closed" && canSchedule ? schedulingFieldsHtml : ""}
+          ${t.state !== "closed" && !canSchedule ? `<p class="small">Scheduling is done by HOD or CS.</p>` : ""}
+          ${t.state !== "closed" && canSchedule ? `<button type="button" class="secondary" onclick="openEventPicker()">Choose from Calendar</button>
+            <p class="small" style="margin:6px 0 8px;">Create the job in Google Calendar first if nothing shows up. <a href="calendar.html">Open Calendar</a></p>` : ""}
+          <div id="pendingLinkArea"></div>
+          ${t.state !== "closed" && canSchedule ? `<button onclick="confirmLinkEvents()">${t.state === "created" ? "Schedule" : "Link Day(s)"}</button>` : ""}
+          ${days.length ? `<div class="divider"></div><h3>Visit Days</h3>${dayRowsHtml}` : ""}
+          <div id="eventPickerOverlay" class="modal-overlay" style="display:none;">
+            <div class="modal-dialog">
+              <h2><span id="pickerTitle">Choose a date</span><button class="modal-close" onclick="closeEventPicker()">&times;</button></h2>
+              <div id="pickerBody"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h2 style="margin:0;">Assignees</h2>
+            <button class="secondary" onclick="toggleAssigneePanel()">+ Add</button>
+          </div>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
+            ${t.assignees.length ? t.assignees.map(name => `<span class="badge badge-type">${name} <span style="cursor:pointer;margin-left:4px;" onclick="removeAssignee('${name}')" title="Remove">&times;</span></span>`).join("") : '<span class="small">None</span>'}
+          </div>
+          <div id="assigneePanel" style="display:none;margin-top:12px;">
+            <div class="checklist-box">${assigneeCheckboxesHtml}</div>
+            <button onclick="confirmAddAssignees()" style="margin-top:8px;">Add selected</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Actions</h2>
+          ${t.state === "approved" && canClose ? `<button onclick="doClose()">Close — resolved</button>` : ""}
+          ${canEarlyClose ? `<button class="danger" onclick="doEarlyClose()">Close Early</button>` : ""}
+          <button class="secondary" onclick="doSnooze()">Snooze / hold</button>
+          ${t.state === "created" && canDo(session.role, "delete_ticket") ? `<button class="danger" onclick="doDeleteTicket()" style="margin-top:6px;">Delete Ticket</button>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function render() {
+  if (!ticketId) {
+    document.getElementById("detailRoot").innerHTML = `<div class="card"><div class="empty">No ticket specified.</div></div>`;
+    return;
+  }
+  let t;
+  try {
+    const [ticketData, { calendar_events }] = await Promise.all([
+      api(`/api/tickets/${ticketId}`), api("/api/calendar_events"),
+    ]);
+    t = ticketData;
+    allCalendarEvents = calendar_events;
+  } catch (e) {
+    document.getElementById("detailRoot").innerHTML = `<div class="card"><div class="empty">Ticket not found.</div></div>`;
+    return;
+  }
+  document.getElementById("detailRoot").innerHTML = detailShell(t);
+  renderPendingLinkArea();
+  // Clears this user's @mention notifications for this ticket now that
+  // they're looking at it — best-effort, doesn't block or re-render.
+  // Only write when there is something new to mark as read, so an open
+  // ticket page doesn't rewrite the database on every 4 s poll.
+  const readUpTo = (t.mention_reads || {})[session.name];
+  if (readUpTo === undefined || readUpTo < (t.messages || []).length) {
+    doAction(ticketId, "mark_ticket_read", { actor: session.name }, () => {}, () => {});
+  }
+}
+
+function toggleAssigneePanel() {
+  const el = document.getElementById("assigneePanel");
+  el.style.display = el.style.display === "none" ? "block" : "none";
+}
+function confirmAddAssignees() {
+  const checked = [...document.querySelectorAll('#assigneePanel input[type=checkbox]:checked')].map(c => c.value);
+  if (!checked.length) { toggleAssigneePanel(); return; }
+  const addNext = () => {
+    if (!checked.length) { render(); return; }
+    const name = checked.shift();
+    doAction(ticketId, "assign", { name, action: "add", actor: session.name }, addNext, err);
+  };
+  addNext();
+}
+function removeAssignee(name) {
+  doAction(ticketId, "assign", { name, action: "remove", actor: session.name }, render, err);
+}
+
+function toggleDayEdit(dayId) {
+  editingDayId = editingDayId === dayId ? null : dayId;
+  render();
+}
+function saveDayPeople(dayId) {
+  const engineer = document.getElementById(`dayEngineer-${dayId}`).value;
+  const technicians = checkedValues(`day-tech-${dayId}`);
+  doAction(ticketId, "set_day_people", { day_id: dayId, engineer, technicians, actor: session.name }, () => {
+    editingDayId = null; render();
+  }, err);
+}
+
+function removeLinkedEvent(eventId) {
+  if (!confirm("Unlink this event? Its visit day (and unsubmitted checklist) will be removed.")) return;
+  doAction(ticketId, "unlink_event", { calendar_event_id: eventId, actor: session.name }, render, err);
+}
+
+function renderPendingLinkArea() {
+  const el = document.getElementById("pendingLinkArea");
+  if (!el) return;
+  el.innerHTML = pendingLinkIds.length
+    ? `<label>Selected to link</label>` + pendingLinkIds.map(id => `
+        <span class="chip-link" style="background:var(--accent-soft);margin:0 6px 6px 0;">${eventLabel(id)}
+          <span style="cursor:pointer;margin-left:6px;" onclick="unpickEvent('${id}')">&times;</span></span>
+      `).join("")
+    : "";
+}
+function unpickEvent(id) { pendingLinkIds = pendingLinkIds.filter(x => x !== id); renderPendingLinkArea(); }
+
+function confirmLinkEvents() {
+  if (!pendingLinkIds.length) { err("Choose at least one calendar event first."); return; }
+  const technicians = checkedValues("sched-tech");
+  const payload = { calendar_event_ids: pendingLinkIds, technicians, actor: session.name };
+  const schedEngineerEl = document.getElementById("schedEngineer");
+  if (schedEngineerEl) {
+    if (!schedEngineerEl.value) { err("An engineer is required for the first scheduling."); return; }
+    payload.engineer = schedEngineerEl.value;
+  }
+  // No technician ticked = engineer-only visit (the engineer goes to site alone and fills the checklist and
+  // report). The server checks that an engineer is set for the visit.
+  doAction(ticketId, "link_events", payload, () => { pendingLinkIds = []; render(); }, err);
+}
+
+function openEventPicker() {
+  pickerMonthCursor = todayYmd();
+  renderPickerMonth();
+  document.getElementById("eventPickerOverlay").style.display = "flex";
+}
+function closeEventPicker() { document.getElementById("eventPickerOverlay").style.display = "none"; }
+function renderPickerMonth() {
+  const { y, m } = parseYmd(pickerMonthCursor);
+  document.getElementById("pickerTitle").textContent = `${MONTH_NAMES[m-1]} ${y} — pick a date`;
+  document.getElementById("pickerBody").innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button class="secondary" onclick="pickerNav(-1)">&larr;</button>
+      <button class="secondary" onclick="pickerNav(1)">&rarr;</button>
+    </div>
+    ${renderMonthGrid(y, m, allCalendarEvents.filter(e => !e.linked_ticket_id), "pickerDayClick")}
+    ${pendingLinkIds.length ? `<button onclick="closeEventPicker()" style="margin-top:10px;">Done — ${pendingLinkIds.length} selected</button>` : ""}
+  `;
+}
+function pickerNav(dir) {
+  const { y, m } = parseYmd(pickerMonthCursor);
+  pickerMonthCursor = dir < 0
+    ? ymd(m === 1 ? y - 1 : y, m === 1 ? 12 : m - 1, 1)
+    : ymd(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1);
+  renderPickerMonth();
+}
+function pickerDayClick(dateStr) {
+  const dayEvents = allCalendarEvents.filter(e => !e.linked_ticket_id && dateStr >= e.date && dateStr <= e.end_date);
+  document.getElementById("pickerTitle").textContent = dateStr;
+  document.getElementById("pickerBody").innerHTML = `
+    <button class="secondary" onclick="renderPickerMonth()" style="margin-bottom:8px;">&larr; Back to month</button>
+    ${dayEvents.length
+      ? dayEvents.map(e => `<div class="ticket-block" style="cursor:pointer;" onclick="pickerToggleEvent('${e.id}')">
+          <div class="ticket-title">${pendingLinkIds.includes(e.id) ? icon("check") + " " : ""}${e.title}</div>
+          <div class="ticket-meta">${e.all_day ? "All-day" + (e.end_date !== e.date ? " (through " + e.end_date + ")" : "") : (e.time || "No time set")}</div>
+        </div>`).join("")
+      : emptyState("No unlinked events on this day.", "calendar")}
+    ${pendingLinkIds.length ? `<button onclick="closeEventPicker()" style="margin-top:10px;">Done — ${pendingLinkIds.length} selected</button>` : ""}
+  `;
+}
+function pickerToggleEvent(id) {
+  if (pendingLinkIds.includes(id)) pendingLinkIds = pendingLinkIds.filter(x => x !== id);
+  else pendingLinkIds.push(id);
+  pickerDayClick(allCalendarEvents.find(e => e.id === id).date);
+  renderPendingLinkArea();
+}
+
+function doClose() { doAction(ticketId, "close", { actor: session.name }, render, err); }
+function doEarlyClose() {
+  const reason = prompt("Reason for early closure (e.g. client cancelled, resolved by phone):");
+  if (!reason) return;
+  doAction(ticketId, "early_close", { reason, actor: session.name }, render, err);
+}
+function doSnooze() {
+  const until = prompt("Resurface date (YYYY-MM-DD)?");
+  if (!until) return;
+  const reason = prompt("Reason for snoozing? (optional, helps analytics later)") || "";
+  doAction(ticketId, "snooze", { until, reason, actor: session.name }, render, err);
+}
+function doDeleteTicket() {
+  if (!confirm("Delete this ticket? This CANNOT be undone.")) return;
+  doAction(ticketId, "delete_ticket", { actor: session.name }, () => location.href = `${session.role}.html`, err);
+}
+function toggleMentionPanel() {
+  const el = document.getElementById("mentionPanel");
+  if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+}
+function checkedMentions() {
+  return [...document.querySelectorAll('#mentionPanel input[type=checkbox]:checked')].map(c => c.value);
+}
+function updateMentionChips() {
+  const chips = document.getElementById("mentionChips");
+  if (!chips) return;
+  const names = checkedMentions();
+  chips.innerHTML = names.map(name => `<span class="badge badge-type">@${name}</span>`).join("");
+}
+function sendMessage() {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  const mentions = checkedMentions();
+  doAction(ticketId, "message", { text, mentions, actor: session.name }, () => { input.value = ""; render(); }, err);
+}
+
+async function init() {
+  // Fasa 6 audit (3 Okt) — same "stuck Loading…" bug class already fixed in
+  // checklist.html: a failed /api/accounts call used to leave this await's
+  // rejection uncaught, render() never got called, and the page stayed on
+  // the static "Loading…" placeholder forever — the setInterval below only
+  // calls render() (not init()), so it could never recover either.
+  // allAccounts/accountsByName already default to []/{} above, so on
+  // failure we just skip filling them in and still render the ticket itself
+  // (account-dependent bits like assignee names simply show blank/empty
+  // instead of crashing the whole page) — the next successful poll below
+  // will naturally pick accounts up once the API is reachable again.
+  try {
+    const { accounts } = await api("/api/accounts");
+    allAccounts = accounts;
+    accountsByName = Object.fromEntries(accounts.map(a => [a.name, a]));
+  } catch (e) {
+    showToast("Couldn't load account list — some names may show blank until the page refreshes.");
+  }
+  render();
+}
+init();
+
+setInterval(() => {
+  const active = document.activeElement;
+  const root = document.getElementById("detailRoot");
+  const isTyping = root && active && root.contains(active) && ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(active.tagName);
+  // Fasa 8 audit (5 Okt) — "mentionPanel" was missing from this list: opening
+  // "+ Mention" and checking names, then pausing more than 4s before hitting
+  // Send, meant the next poll called render() and rebuilt detailRoot from
+  // scratch — closing the panel and silently clearing the checked names.
+  const panelOpen = ["assigneePanel", "eventPickerOverlay", "mentionPanel"].some(id => {
+    const el = document.getElementById(id);
+    return el && el.style.display !== "none";
+  });
+  const schedTechChecked = document.querySelector('[id^="sched-tech-"]:checked');
+  if (!isTyping && !panelOpen && !schedTechChecked && editingDayId === null && !editingDetails) render();
+}, 4000);
+</script>
+</body>
+</html>

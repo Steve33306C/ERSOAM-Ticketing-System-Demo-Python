@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Calendar — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "calendar", role: session.role, session,
+  pageTitle: "Calendar", pageSubtitle: "One-way sync from Google Calendar. Click a date to see and link its events.",
+});
+
+let view = "month"; // or "week"
+let cursorDate = todayYmd(); // anchor date for whichever view is active
+let allEvents = [];
+let allTickets = [];
+let allAccounts = [];
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="card">
+    <div class="cal-toolbar">
+      <div class="cal-toolbar-left">
+        <button class="secondary" onclick="navToday()">Today</button>
+        <button class="secondary" onclick="navPrev()">&larr;</button>
+        <button class="secondary" onclick="navNext()">&rarr;</button>
+        <h3 id="calLabel"></h3>
+      </div>
+      <div class="tabs" style="margin:0;">
+        <button class="tab" data-view="month" onclick="setView('month')">Month</button>
+        <button class="tab" data-view="week" onclick="setView('week')">Week</button>
+      </div>
+    </div>
+    <div id="calGrid"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="card" id="simSyncCard">
+    <h2>Simulate a new Google Calendar sync</h2>
+    <p class="small">There's no live Google Calendar connection in this demo — CS creates the real job in
+    Google Calendar and it appears here automatically via the one-way sync. This form stands in for that
+    arrival so the linking workflow stays testable.</p>
+    <div class="field-row">
+      <div><label>Title</label><input id="ev-title" type="text" placeholder="e.g. Client Name - Job type"></div>
+      <div><label>Date</label><input id="ev-date" type="date"></div>
+      <div id="ev-time-wrap"><label>Time</label><input id="ev-time" type="time"></div>
+      <div><label id="ev-until-label">Until</label><input id="ev-until" type="time"></div>
+    </div>
+    <div class="field-row">
+      <div><label style="display:inline-flex;align-items:center;gap:6px;text-transform:none;font-weight:600;color:var(--text);"><input id="ev-allday" type="checkbox" style="width:auto;" onchange="toggleAllDayFields()"> All-day / multi-day event</label></div>
+    </div>
+    <button onclick="addEvent()">Simulate sync</button>
+    <div id="ev-error" class="small" style="color:#b91c1c;"></div>
+  </div>
+
+  <div id="dayOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-dialog">
+      <h2><span id="dayOverlayTitle">Events</span><button class="modal-close" onclick="closeDayOverlay()">&times;</button></h2>
+      <div id="dayOverlayList"></div>
+    </div>
+  </div>
+
+  <div id="eventOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal-dialog">
+      <h2><span>Event</span><button class="modal-close" onclick="closeEventOverlay()">&times;</button></h2>
+      <div id="eventOverlayBody"></div>
+    </div>
+  </div>
+`;
+if (!canDo(session.role, "create_calendar_event")) document.getElementById("simSyncCard").style.display = "none";
+
+function toggleAllDayFields() {
+  const isAllDay = document.getElementById("ev-allday").checked;
+  document.getElementById("ev-time-wrap").style.display = isAllDay ? "none" : "block";
+  const untilInput = document.getElementById("ev-until");
+  untilInput.type = isAllDay ? "date" : "time";
+  untilInput.value = "";
+  document.getElementById("ev-until-label").textContent = isAllDay ? "Until (date, optional)" : "Until (optional)";
+}
+
+async function addEvent() {
+  const errEl = document.getElementById("ev-error");
+  errEl.textContent = "";
+  const isAllDay = document.getElementById("ev-allday").checked;
+  const untilVal = document.getElementById("ev-until").value;
+  try {
+    await api("/api/calendar_events", "POST", {
+      title: document.getElementById("ev-title").value,
+      date: document.getElementById("ev-date").value,
+      time: document.getElementById("ev-time").value,
+      all_day: isAllDay,
+      end_date: isAllDay ? untilVal : "",
+      end_time: isAllDay ? "" : untilVal,
+      actor: session.name,
+    });
+    document.getElementById("ev-title").value = "";
+    document.getElementById("ev-date").value = "";
+    document.getElementById("ev-time").value = "";
+    document.getElementById("ev-allday").checked = false;
+    document.getElementById("ev-until").value = "";
+    toggleAllDayFields();
+    loadAndRender();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  renderGrid();
+}
+function navToday() { cursorDate = todayYmd(); renderGrid(); }
+function navPrev() {
+  if (view === "month") {
+    const { y, m } = parseYmd(cursorDate);
+    cursorDate = ymd(m === 1 ? y - 1 : y, m === 1 ? 12 : m - 1, 1);
+  } else {
+    cursorDate = addDaysStr(cursorDate, -7);
+  }
+  renderGrid();
+}
+function navNext() {
+  if (view === "month") {
+    const { y, m } = parseYmd(cursorDate);
+    cursorDate = ymd(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1);
+  } else {
+    cursorDate = addDaysStr(cursorDate, 7);
+  }
+  renderGrid();
+}
+
+function renderGrid() {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === view));
+  const { y, m } = parseYmd(cursorDate);
+  if (view === "month") {
+    document.getElementById("calLabel").textContent = `${MONTH_NAMES[m-1]} ${y}`;
+    document.getElementById("calGrid").innerHTML = renderMonthGrid(y, m, allEvents, "openDayOverlay", "openEventOverlay");
+  } else {
+    const weekStart = startOfWeekStr(cursorDate);
+    const weekEnd = addDaysStr(weekStart, 6);
+    const label = parseYmd(weekStart).m === parseYmd(weekEnd).m
+      ? `${MONTH_NAMES[parseYmd(weekStart).m-1]} ${parseYmd(weekStart).d}–${parseYmd(weekEnd).d}, ${parseYmd(weekStart).y}`
+      : `${MONTH_NAMES[parseYmd(weekStart).m-1]} ${parseYmd(weekStart).d} – ${MONTH_NAMES[parseYmd(weekEnd).m-1]} ${parseYmd(weekEnd).d}, ${parseYmd(weekEnd).y}`;
+    document.getElementById("calLabel").textContent = label;
+    document.getElementById("calGrid").innerHTML = renderWeekGrid(weekStart, allEvents, "openDayOverlay", "openEventOverlay");
+    // scroll the hour grid to a sensible default (7am) so the workday is visible without scrolling
+    const wrap = document.querySelector(".cal-hourgrid-wrap");
+    if (wrap) wrap.scrollTop = 7 * 36;
+  }
+}
+
+function openDayOverlay(dateStr) {
+  const dayEvents = allEvents.filter(e => dateStr >= e.date && dateStr <= e.end_date);
+  document.getElementById("dayOverlayTitle").textContent = dateStr;
+  const list = document.getElementById("dayOverlayList");
+  list.innerHTML = dayEvents.length
+    ? dayEvents.map(e => `<div class="ticket-block" style="cursor:pointer;" onclick="openEventOverlay('${e.id}')">
+        <div class="ticket-title">${e.title} ${e.linked_ticket_id ? `<span class="badge badge-approved">Linked</span>` : `<span class="badge badge-open">Unlinked</span>`}</div>
+        <div class="ticket-meta">${e.all_day ? "All-day" + (e.end_date !== e.date ? ` (through ${e.end_date})` : "") : (e.time || "No time set") + (e.end_time && e.end_time !== e.time ? `\u2013${e.end_time}` : "")}</div>
+      </div>`).join("")
+    : emptyState("No events on this day.", "calendar");
+  document.getElementById("dayOverlay").style.display = "flex";
+}
+function closeDayOverlay() { document.getElementById("dayOverlay").style.display = "none"; }
+
+function openEventOverlay(eventId) {
+  closeDayOverlay();
+  const e = allEvents.find(x => x.id === eventId);
+  if (!e) return;
+  const linkedTicket = e.linked_ticket_id ? allTickets.find(t => t.id === e.linked_ticket_id) : null;
+  const unscheduledTickets = allTickets.filter(t => t.state === "created");
+  const engineers = allAccounts.filter(a => a.role === "engineer");
+
+  const body = document.getElementById("eventOverlayBody");
+  body.innerHTML = `
+    <div class="kv-row"><span class="k">Title</span><span class="v">${e.title}</span></div>
+    <div class="kv-row"><span class="k">Date</span><span class="v">${e.date}${e.end_date !== e.date ? " – " + e.end_date : ""}</span></div>
+    <div class="kv-row"><span class="k">Time</span><span class="v">${e.all_day ? "All-day" : (e.time || "—") + (e.end_time && e.end_time !== e.time ? " \u2013 " + e.end_time : "")}</span></div>
+    <div class="divider"></div>
+    <div id="linkError" class="small" style="color:#b91c1c;"></div>
+    ${linkedTicket
+      ? `<button onclick="location.href='ticket-detail.html?id=${linkedTicket.id}'">View linked ticket (${linkedTicket.id})</button>`
+      : !canDo(session.role, "link_events") ? `<p class="small">Linking an event to a ticket is done by HOD or CS.</p>` : `
+        <label>Link to ticket (unscheduled tickets only)</label>
+        <select id="linkTicket">${unscheduledTickets.length ? `<option value="">Select a ticket…</option>` + unscheduledTickets.map(t => `<option value="${t.id}">${t.id} — ${t.title}</option>`).join("") : `<option value="">No unscheduled tickets available</option>`}</select>
+        <label>Engineer</label>
+        <select id="linkEngineer"><option value="">Select engineer…</option>${engineers.map(a => `<option value="${a.name}">${a.name}</option>`).join("")}</select>
+        <label>Technicians (leave empty if the engineer goes alone)</label>
+        <div class="checklist-box">${technicianCheckboxList(allAccounts, [], "link-tech")}</div>
+        <button onclick="confirmLink('${e.id}')">Link to ticket</button>
+      `}
+  `;
+  document.getElementById("eventOverlay").style.display = "flex";
+}
+function closeEventOverlay() { document.getElementById("eventOverlay").style.display = "none"; }
+
+function confirmLink(eventId) {
+  const ticketId = document.getElementById("linkTicket").value;
+  const engineer = document.getElementById("linkEngineer").value;
+  const technicians = checkedValues("link-tech");
+  const errEl = document.getElementById("linkError");
+  errEl.textContent = "";
+  if (!ticketId) { errEl.textContent = "Select a ticket to link."; return; }
+  if (!engineer) { errEl.textContent = "Select an engineer."; return; }
+  // No technician = engineer-only visit; an engineer is already required above.
+  doAction(ticketId, "link_events", { engineer, calendar_event_id: eventId, technicians, actor: session.name },
+    () => { closeEventOverlay(); loadAndRender(); },
+    m => { errEl.textContent = m; });
+}
+
+async function loadAndRender() {
+  // Fasa 6 audit (3 Okt) — same "stuck Loading…" bug class already fixed in
+  // checklist.html: this already retries every 8s below, but a failed call
+  // was still an uncaught rejection (console noise, no message to the user)
+  // and left whatever was on screen — including the initial "Loading…" on
+  // first load — with no explanation. Now the first failed load shows a
+  // clear message instead of hanging silently; the 8s retry still self-heals.
+  let calendar_events, tickets, accounts;
+  try {
+    const results = await Promise.all([
+      api("/api/calendar_events"), api("/api/tickets"), api("/api/accounts"),
+    ]);
+    calendar_events = results[0].calendar_events;
+    tickets = results[1].tickets;
+    accounts = results[2].accounts;
+  } catch (e) {
+    document.getElementById("calGrid").innerHTML = `<div class="empty">Couldn't load the calendar — ${e.message || "retrying…"}</div>`;
+    return;
+  }
+  allEvents = calendar_events;
+  allTickets = tickets;
+  allAccounts = accounts;
+  renderGrid();
+}
+
+loadAndRender();
+setInterval(() => {
+  const active = document.activeElement;
+  const inOverlay = active && (active.closest("#dayOverlay") || active.closest("#eventOverlay") || ["ev-title","ev-date","ev-time","ev-enddate"].includes(active.id));
+  const overlaysOpen = document.getElementById("dayOverlay").style.display !== "none" || document.getElementById("eventOverlay").style.display !== "none";
+  if (!inOverlay && !overlaysOpen) loadAndRender();
+}, 8000);
+</script>
+</body>
+</html>

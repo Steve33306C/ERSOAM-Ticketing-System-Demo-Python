@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERS O&amp;M Portal</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0c0e18">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body class="login-body">
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo"><b>ers</b><span class="mark">&#10022;</span></div>
+    <h1>ERS O&amp;M Portal</h1>
+    <p class="login-sub">Pick an account to sign in — demo has no passwords.</p>
+    <div id="accountList"><div class="empty">Loading accounts…</div></div>
+    <p class="small login-note">Prototype login: picking an account simulates that person's session so you can see
+    how the dashboard and ticket visibility change per role and per assignment.</p>
+  </div>
+</div>
+<script src="shared.js"></script>
+<script>
+// If already logged in, skip straight to the right dashboard.
+(function () {
+  const s = getSession();
+  if (s) window.location.href = `dashboard-${s.role}.html`;
+})();
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #accountList with the real list exactly
+// as before.
+document.getElementById("accountList").innerHTML = skeletonRows(3);
+
+const ROLE_ORDER = ["admin", "engineer", "cs", "technician"];
+const ROLE_GROUP_LABEL = {
+  admin: "Admin (HOD)",
+  engineer: "Engineers",
+  cs: "Customer Service",
+  technician: "Technicians",
+};
+
+function login(account) {
+  setSession(account);
+  window.location.href = `dashboard-${account.role}.html`;
+}
+
+async function render() {
+  let accounts;
+  try {
+    ({ accounts } = await api("/api/accounts"));
+  } catch (e) {
+    document.getElementById("accountList").innerHTML =
+      `<div class="empty">Couldn't load accounts — ${e.message || "is the server running?"} Retrying…</div>`;
+    setTimeout(render, 4000);
+    return;
+  }
+  const byRole = {};
+  accounts.forEach(a => { (byRole[a.role] = byRole[a.role] || []).push(a); });
+
+  const el = document.getElementById("accountList");
+  el.innerHTML = "";
+  ROLE_ORDER.forEach(role => {
+    if (!byRole[role]) return;
+    const group = document.createElement("div");
+    group.className = "login-group";
+    group.innerHTML = `<div class="login-group-label">${ROLE_GROUP_LABEL[role]}</div>`;
+    byRole[role].forEach(a => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "account-row";
+      btn.innerHTML = `<span class="avatar">${initials(a.name)}</span><span>${a.name}</span>`;
+      btn.onclick = () => login(a);
+      group.appendChild(btn);
+    });
+    el.appendChild(group);
+  });
+}
+render();
+</script>
+</body>
+</html>

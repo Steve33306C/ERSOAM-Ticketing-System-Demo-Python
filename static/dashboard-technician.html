@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Today's Jobs — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("technician");
+renderMobileShell({ pageTitle: "Today's Jobs", session });
+
+document.getElementById("pageContent").innerHTML = `
+  <p class="dash-greeting">Welcome back, ${session.name.replace(/^[A-Za-z]+ - /, "")} — here's your schedule for today.</p>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon job-type-icon-default">${icon("clipboard")}</div>
+      <div><div class="stat-num" id="stat-today">—</div><div class="stat-label">JOBS TODAY</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon job-type-icon-troubleshooting">${icon("warning")}</div>
+      <div><div class="stat-num" id="stat-pending">—</div><div class="stat-label">PENDING CHECKLISTS TODAY</div></div>
+    </div>
+  </div>
+
+  <h3 style="margin:4px 4px 10px;">Today</h3>
+  <div id="list-today"></div>
+  <h3 style="margin:22px 4px 10px;">Tomorrow</h3>
+  <div id="list-tomorrow"></div>
+
+  <div class="dashboard-utility-bar">
+    <button class="secondary" onclick="openChecklistPicker()">${icon("clipboard")} Safety Checklist</button>
+    <button onclick="openReportPicker()">${icon("document")} Draft Report</button>
+  </div>
+`;
+
+// Skeleton placeholders while the first render() is still waiting on the
+// API — avoids a blank gap before jobs appear. render() below overwrites
+// these same containers with real content exactly as before.
+document.getElementById("list-today").innerHTML = skeletonCards(2);
+document.getElementById("list-tomorrow").innerHTML = skeletonCards(1);
+
+let allTickets = [];
+let accountsByName = {};
+let clientsByName = {};
+
+const TYPE_ICON = {
+  site_survey: icon("compass"),
+  servicing: icon("wrench"),
+  troubleshooting: icon("lightning"),
+  dere: icon("sun"),
+  // Newer ticket types (Ticket Type Expansion, 2 Okt) — reuse the closest
+  // existing icon rather than inventing a new one per type.
+  residential_servicing: icon("wrench"),
+  ci_servicing: icon("wrench"),
+  residential_troubleshooting: icon("lightning"),
+  ci_troubleshooting: icon("lightning"),
+  ntp_phase_1: icon("document"),
+  ntp_phase_2: icon("document"),
+  ntp_phase_3: icon("document"),
+  ntp_phase_4: icon("document"),
+};
+const TYPE_ICON_CLASS = {
+  site_survey: "job-type-icon-survey",
+  servicing: "job-type-icon-servicing",
+  troubleshooting: "job-type-icon-troubleshooting",
+  dere: "job-type-icon-dere",
+  residential_servicing: "job-type-icon-servicing",
+  ci_servicing: "job-type-icon-servicing",
+  residential_troubleshooting: "job-type-icon-troubleshooting",
+  ci_troubleshooting: "job-type-icon-troubleshooting",
+  ntp_phase_1: "job-type-icon-default",
+  ntp_phase_2: "job-type-icon-default",
+  ntp_phase_3: "job-type-icon-default",
+  ntp_phase_4: "job-type-icon-default",
+};
+
+function checklistFlagFor(day) {
+  const cls = day.status === "submitted" ? "job-flag-done" : day.status === "unfinished" ? "job-flag-progress" : "job-flag-notstarted";
+  return `<span class="job-flag ${cls}">Checklist: ${dayStatusLabel(day).toLowerCase()}</span>`;
+}
+function reportFlag(t) {
+  if (t.state === "created") return `<span class="job-flag job-flag-notstarted">Report: not created</span>`;
+  if (t.report && t.report.status === "approved") return `<span class="job-flag job-flag-done">Report: approved</span>`;
+  if (t.report && t.report.status === "submitted") return `<span class="job-flag job-flag-done">Report: submitted</span>`;
+  return `<span class="job-flag job-flag-progress">Report: in progress</span>`;
+}
+// Surfaced here too (not just on job-detail.html) so the technician sees it
+// from the very first screen, before tapping in.
+function rescheduleFlag(t) {
+  return t.reschedule_requested ? `<span class="job-flag job-flag-alert">Waiting reschedule from CS</span>` : "";
+}
+
+function jobCard(t, day) {
+  const iconCls = TYPE_ICON_CLASS[t.type] || "job-type-icon-default";
+  const iconSvg = TYPE_ICON[t.type] || icon("wrench");
+  const teamLabel = teamLabelForTechnicians(day.technicians, accountsByName);
+  const client = clientsByName[t.client.trim().toLowerCase()];
+  const address = client && client.address ? client.address : "No address on file";
+  return `<div class="job-card-rich" onclick="location.href='job-detail.html?id=${t.id}'">
+    <div class="job-card-rich-icon ${iconCls}">${iconSvg}</div>
+    <div class="job-card-rich-body">
+      <div class="job-card-rich-top">
+        <span class="job-card-time">${day.date === todayYmd() ? "Today" : day.date}</span>
+        ${teamLabel ? `<span class="badge badge-type">${teamLabel}</span>` : ""}
+      </div>
+      <div class="job-card-title">${t.client}</div>
+      <div class="list-card-meta">${TYPE_LABELS[t.type] || t.type}</div>
+      <div class="job-card-address">${icon("pin")} ${address}</div>
+      <div class="job-flags">${checklistFlagFor(day)}${reportFlag(t)}${rescheduleFlag(t)}</div>
+      <div class="job-card-viewlink">View details &rarr;</div>
+    </div>
+  </div>`;
+}
+
+function openChecklistPicker() {
+  // Closed ticket (normal or early) has no more work left on it — don't
+  // let a technician pick it from this list either, same reasoning as
+  // jobsForDate() below (Bug B1, 2 Okt).
+  const eligible = allTickets.filter(t => t.state !== "closed" && (t.visit_days || []).length > 0);
+  openJobPicker("Open a safety checklist", eligible, "goToChecklist");
+}
+function goToChecklist(id) { if (id) location.href = `job-detail.html?id=${id}`; }
+
+function openReportPicker() {
+  const eligible = allTickets.filter(t => t.state !== "created" && t.state !== "closed");
+  openJobPicker("Draft or edit a report", eligible, "goToReport");
+}
+function goToReport(id) { if (id) location.href = `report.html?id=${id}`; }
+
+function jobsForDate(tickets, dateStr) {
+  const out = [];
+  tickets.forEach(t => {
+    // A closed ticket (normal or early) has no more work left on it — it
+    // shouldn't keep showing up on a technician's Today/Tomorrow list just
+    // because its visit day happens to fall on this date. (Bug B1, 2 Okt.)
+    if (t.state === "closed") return;
+    const day = visitDayByDate(t, dateStr);
+    if (day && isMyTeamDay(day, session, accountsByName)) out.push({ t, day });
+  });
+  return out;
+}
+
+async function render() {
+  // Fasa 8 audit (5 Okt) — same "stuck Loading…" bug class as B3
+  // (checklist.html): this page had no try/catch around its initial API
+  // calls, so a failed first load left the skeleton placeholders showing
+  // forever with no explanation, only self-healing on the next successful
+  // poll (6s later). Now a failed load shows a clear message instead.
+  let tickets, accounts, clients;
+  try {
+    const results = await Promise.all([
+      api("/api/tickets"), api("/api/accounts"), api("/api/clients"),
+    ]);
+    tickets = results[0].tickets;
+    accounts = results[1].accounts;
+    clients = results[2].clients;
+  } catch (e) {
+    const msg = `<div class="empty">Couldn't load your jobs — ${e.message || "retrying…"}</div>`;
+    document.getElementById("list-today").innerHTML = msg;
+    document.getElementById("list-tomorrow").innerHTML = msg;
+    return;
+  }
+  accountsByName = Object.fromEntries(accounts.map(a => [a.name, a]));
+  clientsByName = Object.fromEntries(clients.map(c => [c.name.trim().toLowerCase(), c]));
+  allTickets = tickets;
+
+  const today = jobsForDate(tickets, todayYmd());
+  const tomorrow = jobsForDate(tickets, addDaysStr(todayYmd(), 1));
+
+  document.getElementById("stat-today").textContent = today.length;
+  document.getElementById("stat-pending").textContent =
+    today.filter(({ day }) => day.status !== "submitted").length;
+
+  document.getElementById("list-today").innerHTML = today.length
+    ? today.map(({ t, day }) => jobCard(t, day)).join("")
+    : emptyState("No jobs assigned to you today — enjoy the breather.", "check", "font-size:16px;padding:20px 0;");
+
+  document.getElementById("list-tomorrow").innerHTML = tomorrow.length
+    ? tomorrow.map(({ t, day }) => jobCard(t, day)).join("")
+    : emptyState("Nothing lined up for tomorrow yet.", "calendar", "font-size:15px;padding:20px 0;");
+}
+render();
+setInterval(render, 6000);
+</script>
+</body>
+</html>

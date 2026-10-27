@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "engineer", "cs", "technician"]);
+const isTech = session.role === "technician";
+// Phone layout (one section at a time) for technicians, and for an engineer using a
+// phone-sized screen. An engineer on a computer keeps the full desktop layout.
+// Chosen once when the page opens.
+const mobileView = isTech || (session.role === "engineer" && window.matchMedia("(max-width: 768px)").matches);
+// Where "back" goes: the job page, for whoever has one (technician, or an engineer on an engineer-only visit).
+function jobLink(t) {
+  const solo = session.role === "engineer" && (t.visit_days || []).some(d => (d.technicians || []).length === 0 && d.engineer === session.name);
+  return (isTech || solo) ? "job-detail.html" : "ticket-detail.html";
+}
+const ticketId = getQueryParam("id");
+let ticket = null;
+let allAccounts = [];
+let currentSectionKey = "general"; // technician paginated view only
+
+if (mobileView) {
+  renderMobileShell({ pageTitle: "Report", session, active: isTech ? "report-list.html" : "dashboard-engineer.html" });
+} else {
+  renderShell({ active: "tickets", role: session.role, session, pageTitle: "Report", pageSubtitle: "Full ticket report." });
+}
+document.getElementById("pageContent").innerHTML = `<div id="root"><div class="empty">Loading…</div></div>`;
+
+function err(id, msg) { const el = document.getElementById(id); if (el) el.textContent = msg; }
+function fieldVal(id) { const el = document.getElementById(id); return el ? el.value : ""; }
+
+// ---------- Section renderers (shared by both views) ----------
+function renderSubmitReportButton(t) {
+  const days = t.visit_days || [];
+  const pending = days.filter(d => !["submitted", "unfinished"].includes(d.status));
+  if (pending.length > 0) {
+    return `<div style="text-align:right;">
+      <button disabled title="Complete all safety checklists first">Submit Report</button>
+      <p class="small" style="color:#b91c1c;margin-top:4px;">Complete ${pending.length} pending safety checklist${pending.length === 1 ? "" : "s"} before submitting.</p>
+    </div>`;
+  }
+  return `<button onclick="doSubmitReport()">Submit Report</button>`;
+}
+function renderHeaderCard(t) {
+  const r = t.report;
+  const badgeClass = r.status === "draft" ? "report-status-draft" : "report-status-submitted";
+  const badgeLabel = r.status === "approved" ? "Approved" : r.status === "submitted" ? "Submitted" : "Draft";
+  return `
+    <div class="card">
+      <div class="detail-header">
+        <div>
+          <div class="list-row-id">${r.id}</div>
+          <h2 style="margin:2px 0;">${TYPE_LABELS[t.type] || t.type} · ${t.client}</h2>
+          <div class="ticket-meta">Linked ticket: <a href="${jobLink(t)}?id=${t.id}">${t.id}</a>
+            · Safety checklist: <a href="checklist.html?id=${t.id}">view</a></div>
+        </div>
+        <span class="badge ${badgeClass}">${badgeLabel}</span>
+      </div>
+      <div class="divider"></div>
+      <div class="kv-row"><span class="k">Submitted by</span><span class="v">${r.submitted_by ? `${r.submitted_by} \u2014 ${fmtTime(r.submitted_at)}` : "Not yet submitted"}</span></div>
+      <div class="kv-row"><span class="k">Approved by</span><span class="v">${r.approved_by ? `${r.approved_by} \u2014 ${fmtTime(r.approved_at)}` : "Not yet approved"}</span></div>
+      <div class="kv-row"><span class="k">Created At</span><span class="v">${fmtTime(r.created_at)}</span></div>
+      <div id="hdrError" class="small" style="color:#b91c1c;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+        ${r.status === "draft" && canDo(session.role, "submit_report") ? renderSubmitReportButton(t) : ""}
+        ${canDo(session.role, "report_approve") && r.status === "submitted" ? `
+          <button onclick="approveReport()">Approve</button>
+          <button class="danger" onclick="rejectReportForm()">Reject</button>
+        ` : ""}
+      </div>
+      ${r.report_rejections && r.report_rejections.length ? `<div class="divider"></div><p class="small" style="color:#991b1b;">Last rejection: ${r.report_rejections[r.report_rejections.length-1].reason}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderGeneral(t, editable) {
+  const g = t.report.general;
+  const row = (label, id, val) => editable
+    ? `<div><label>${label}</label><input id="${id}" type="text" value="${val || ""}"></div>`
+    : `<div><label>${label}</label><div class="small" style="padding:6px 0;">${val || "—"}</div></div>`;
+  return `
+    <h2>1. General Information</h2>
+    <div class="field-row">
+      <div><label>Date of Inspection</label>${editable ? `<input id="gen-date" type="date" value="${g.date_of_inspection || ""}">` : `<div class="small" style="padding:6px 0;">${g.date_of_inspection || "—"}</div>`}</div>
+      ${row("System Size (kWp)", "gen-size", g.system_size_kwp)}
+    </div>
+    <div class="field-row">
+      ${row("System Owner", "gen-owner", g.system_owner)}
+      ${row("Contact No.", "gen-contact", g.contact_no)}
+    </div>
+    ${row("System Location", "gen-location", g.system_location)}
+    <div class="field-row">
+      ${row("Inverter Model", "gen-invmodel", g.inverter_model)}
+      ${row("Inverter S/N", "gen-invsn", g.inverter_sn)}
+    </div>
+    ${editable ? `<button class="secondary" onclick="saveGeneral()">Save section</button>` : ""}
+  `;
+}
+
+function renderMaintenance(t, editable) {
+  const items = t.report.maintenance_checklist;
+  const categories = [...new Set(items.map(i => i.category))];
+  const rowsHtml = categories.map(cat => {
+    const catItems = items.filter(i => i.category === cat);
+    return `<div class="report-category-header">${cat}</div>` + catItems.map(item => `
+      <div class="report-item-row">
+        <div class="report-item-name">${item.name}</div>
+        ${item.extra_label ? `<div class="report-item-extra">${editable
+          ? `<input type="text" id="mi-extra-${item.id}" placeholder="${item.extra_label}" value="${item.extra || ""}">`
+          : `<span class="small">${item.extra_label}: ${item.extra || "—"}</span>`}</div>` : ""}
+        ${editable ? `
+          <div class="ar-choice">
+            <label><input type="radio" name="mi-${item.id}" value="accept" ${item.result === "accept" ? "checked" : ""}> Accept</label>
+            <label><input type="radio" name="mi-${item.id}" value="reject" ${item.result === "reject" ? "checked" : ""}> Reject</label>
+          </div>
+          <div class="report-item-remarks"><input type="text" id="mi-remarks-${item.id}" placeholder="Remarks" value="${item.remarks || ""}"></div>
+        ` : `<span class="status-chip ${item.result === "accept" ? "chip-pass" : item.result === "reject" ? "chip-fail" : "chip-pending"}">${item.result || "—"}</span>
+             <span class="small">${item.remarks || ""}</span>`}
+      </div>
+    `).join("");
+  }).join("");
+  return `
+    <h2>2. Corrective &amp; Preventive Maintenance Checklist</h2>
+    ${rowsHtml}
+    ${editable ? `<button class="secondary" onclick="saveMaintenance()" style="margin-top:10px;">Save section</button>` : ""}
+  `;
+}
+
+function acFieldList(phase) {
+  return phase === "single"
+    ? [["line_to_neutral_v", "Line to Neutral (V)"], ["line_to_ground_v", "Line to Ground (V)"], ["neutral_to_ground_v", "Neutral to Ground (V)"]]
+    : [["l1_l2_v", "L1-L2 (V)"], ["l2_l3_v", "L2-L3 (V)"], ["l3_l1_v", "L3-L1 (V)"],
+       ["l1_n_v", "L1-N (V)"], ["l2_n_v", "L2-N (V)"], ["l3_n_v", "L3-N (V)"],
+       ["l1_g_v", "L1-G (V)"], ["l2_g_v", "L2-G (V)"], ["l3_g_v", "L3-G (V)"], ["n_g_v", "N-G (V)"]];
+}
+function renderAcMeasurements(e, editable) {
+  if (!e.ac_phase_type) return "";
+  const m = e.ac_measurements[e.ac_phase_type];
+  const fields = acFieldList(e.ac_phase_type);
+  return `
+    <label style="margin-top:10px;">AC Measurements (${e.ac_phase_type === "single" ? "Single Phase" : "Three Phase"})</label>
+    <div class="ac-measure-grid">
+      ${fields.map(([key, label]) => `
+        <div><label class="small" style="text-transform:none;display:block;">${label}</label>
+        ${editable ? `<input type="text" id="ac-${key}" value="${m[key] || ""}">` : `<div class="small" style="padding:4px 0;">${m[key] || "—"}</div>`}
+        </div>
+      `).join("")}
+    </div>
+    ${editable ? `<button class="secondary" onclick="saveAcMeasurements()" style="margin-top:8px;">Save AC Measurements</button>` : ""}
+  `;
+}
+function renderInverterBox(inv, editable) {
+  return `
+    <div class="inv-box">
+      <div class="inv-box-header">
+        <b>${inv.label}</b>
+        ${editable ? `<button class="danger" style="margin:0;padding:4px 10px;" onclick="removeInverter(${inv.id})">Remove Inverter</button>` : ""}
+      </div>
+      ${inv.mppts.map(m => renderMpptBox(inv, m, editable)).join("") || `<p class="small">No MPPT channels added.</p>`}
+      ${editable ? `<button class="secondary" onclick="addMppt(${inv.id})">+ Add MPPT Channel</button>` : ""}
+    </div>
+  `;
+}
+function renderMpptBox(inv, m, editable) {
+  return `
+    <div class="mppt-box">
+      <div class="mppt-box-header">
+        <span>${m.label}</span>
+        ${editable ? `<button class="danger" style="margin:0;padding:2px 8px;" onclick="removeMppt(${inv.id},${m.id})">Remove</button>` : ""}
+      </div>
+      <div class="dc-table-wrap">
+        <table class="dc-table">
+          <thead><tr><th>String</th><th>Voltage (V)</th><th>Pos to Ground (V)</th><th>Neg to Ground (V)</th><th>Status</th>${editable ? "<th></th>" : ""}</tr></thead>
+          <tbody>
+            ${m.strings.map(s => `<tr>
+              <td>${s.label}</td>
+              <td>${editable ? `<input type="text" style="width:70px;" id="str-v-${inv.id}-${m.id}-${s.id}" value="${s.voltage_v}" onchange="updateString(${inv.id},${m.id},${s.id})">` : (s.voltage_v || "—")}</td>
+              <td>${editable ? `<input type="text" style="width:70px;" id="str-pg-${inv.id}-${m.id}-${s.id}" value="${s.pos_to_ground_v}" onchange="updateString(${inv.id},${m.id},${s.id})">` : (s.pos_to_ground_v || "—")}</td>
+              <td>${editable ? `<input type="text" style="width:70px;" id="str-ng-${inv.id}-${m.id}-${s.id}" value="${s.neg_to_ground_v}" onchange="updateString(${inv.id},${m.id},${s.id})">` : (s.neg_to_ground_v || "—")}</td>
+              <td>${editable ? `<input type="text" style="width:70px;" id="str-st-${inv.id}-${m.id}-${s.id}" value="${s.status}" onchange="updateString(${inv.id},${m.id},${s.id})">` : (s.status || "—")}</td>
+              ${editable ? `<td><button class="danger" style="margin:0;padding:4px 8px;" onclick="removeString(${inv.id},${m.id},${s.id})">&times;</button></td>` : ""}
+            </tr>`).join("") || `<tr><td colspan="${editable ? 6 : 5}" class="empty">No strings added.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      ${editable ? `<button class="secondary" style="margin-top:6px;" onclick="addString(${inv.id},${m.id})">+ Add String</button>` : ""}
+    </div>
+  `;
+}
+function renderElectrical(t, editable) {
+  const e = t.report.electrical;
+  return `
+    <h2>3. Electrical Measurements (AC / DC Input)</h2>
+    <button class="secondary" onclick="openGalleryFromCard3()" style="margin-bottom:10px;">&#128247; View Gallery</button>
+    <label>AC System Phase Configuration</label>
+    ${editable ? `<select id="elec-phase" onchange="saveElectrical()">
+        <option value="">Select Network Phase Type</option>
+        <option value="single" ${e.ac_phase_type === "single" ? "selected" : ""}>Single Phase</option>
+        <option value="three" ${e.ac_phase_type === "three" ? "selected" : ""}>Three Phase</option>
+      </select>`
+      : `<div class="small" style="padding:6px 0;">${e.ac_phase_type || "—"}</div>`}
+    ${renderAcMeasurements(e, editable)}
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <label style="margin:0;">DC Measurement</label>
+      ${editable ? `<button class="secondary" onclick="addInverter()">+ Add Inverter</button>` : ""}
+    </div>
+    ${(e.inverters || []).length ? e.inverters.map(inv => renderInverterBox(inv, editable)).join("") : `<p class="small">No inverters added.</p>`}
+  `;
+}
+
+function mediaBox(t, category, editable) {
+  const [, catLabel, color] = mediaCategoryMeta(category);
+  const list = t.report.media[category] || [];
+  return `
+    <div class="card" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;"><b class="small">${catLabel}</b><span class="photo-count">${list.length} / 20</span></div>
+      <div class="photo-thumb-grid">
+        ${list.map((label, i) => `
+          <div class="photo-thumb" onclick="openGalleryFullscreen('${category}', ${i})" style="cursor:pointer;">
+            <img src="${pseudoPhotoDataUri(label, color)}" alt="${label}">
+            ${editable ? `<button class="photo-thumb-remove" onclick="event.stopPropagation();removeMedia('${category}', ${i})" title="Remove">&times;</button>` : ""}
+          </div>
+        `).join("")}
+        ${editable ? `<div class="photo-capture-tile" onclick="captureReportPhoto('${category}')">
+          <div style="font-size:20px;">&#128247;</div><div>Add Photo</div>
+        </div>` : ""}
+      </div>
+      ${!editable && list.length === 0 ? `<p class="small">None</p>` : ""}
+    </div>
+  `;
+}
+
+function renderMedia(t, editable) {
+  return `
+    <h2>4. Media / Photo Upload Gallery</h2>
+    <p class="small">One tap adds a photo — no typing needed. Mistakes are easy to remove here in the office.</p>
+    ${REPORT_MEDIA_CATEGORIES.map(([cat]) => mediaBox(t, cat, editable)).join("")}
+  `;
+}
+
+function captureReportPhoto(category) {
+  const [, catLabel] = mediaCategoryMeta(category);
+  const label = pseudoPhotoLabel(catLabel);
+  doAction(ticketId, "report_add_media", { category, label, actor: session.name }, () => {
+    showToast(`&#10003; Added to ${catLabel}`);
+    render();
+  }, m => showToast(m));
+}
+let galleryState = null; // { category, index } while the fullscreen viewer is open
+let electricalCardMinimized = false;
+let electricalCardManuallyClosed = false; // closed independently of the gallery itself
+
+function openGalleryFromCard3() {
+  const categories = REPORT_MEDIA_CATEGORIES.map(c => c[0]);
+  const withPhotos = categories.find(cat => (ticket.report.media[cat] || []).length > 0);
+  openGalleryFullscreen(withPhotos || categories[0], 0);
+}
+function openGalleryFullscreen(category, index) {
+  galleryState = { category, index };
+  electricalCardManuallyClosed = false;
+  electricalCardMinimized = false;
+  renderGalleryOverlay();
+  floatElectricalCard();
+}
+function closeGalleryFullscreen() {
+  galleryState = null;
+  electricalCardManuallyClosed = false;
+  electricalCardMinimized = false;
+  const el = document.getElementById("galleryOverlay");
+  if (el) el.remove();
+  unfloatElectricalCard();
+}
+function galleryNav(dir) {
+  const list = ticket.report.media[galleryState.category] || [];
+  if (!list.length) return;
+  galleryState.index = (galleryState.index + dir + list.length) % list.length;
+  renderGalleryOverlay();
+}
+function gallerySwitchCategory(category) {
+  galleryState = { category, index: 0 };
+  renderGalleryOverlay();
+}
+function renderGalleryOverlay() {
+  const old = document.getElementById("galleryOverlay");
+  if (old) old.remove();
+  const list = ticket.report.media[galleryState.category] || [];
+  const label = list[galleryState.index] || "";
+  const meta = mediaCategoryMeta(galleryState.category);
+  const catLabel = meta[1], color = meta[2];
+  document.body.insertAdjacentHTML("beforeend", `
+    <div id="galleryOverlay" class="gallery-fullscreen">
+      <div class="gallery-fullscreen-topbar">
+        <select onchange="gallerySwitchCategory(this.value)" class="gallery-cat-select">
+          ${REPORT_MEDIA_CATEGORIES.map(([key, l]) => `<option value="${key}" ${key === galleryState.category ? "selected" : ""}>${l} (${(ticket.report.media[key] || []).length})</option>`).join("")}
+        </select>
+        <span>${list.length ? galleryState.index + 1 : 0} / ${list.length}</span>
+        <button class="modal-close" onclick="closeGalleryFullscreen()">&times;</button>
+      </div>
+      <div class="gallery-fullscreen-body">
+        <button class="gallery-nav-btn" onclick="galleryNav(-1)" ${list.length < 2 ? "disabled" : ""}>&lsaquo;</button>
+        ${label ? `<img src="${pseudoPhotoDataUri(label, color)}" class="gallery-fullscreen-img">` : `<div class="empty" style="color:white;">No photos in ${catLabel} yet.</div>`}
+        <button class="gallery-nav-btn" onclick="galleryNav(1)" ${list.length < 2 ? "disabled" : ""}>&rsaquo;</button>
+      </div>
+      <p class="gallery-fullscreen-hint">${document.getElementById("electricalCard") ? "Card 3 is floating on top — drag its header to move it, or minimize/close it independently." : ""}</p>
+    </div>
+  `);
+}
+
+function toggleMinimizeElectricalCard() {
+  electricalCardMinimized = !electricalCardMinimized;
+  const el = document.getElementById("electricalCard");
+  if (el) el.classList.toggle("floating-minimized", electricalCardMinimized);
+}
+function closeFloatingCardOnly() {
+  electricalCardManuallyClosed = true;
+  unfloatElectricalCard();
+}
+
+function floatElectricalCard() {
+  const el = document.getElementById("electricalCard");
+  if (!el || el.classList.contains("floating-card")) return;
+  el.classList.add("floating-card");
+  if (electricalCardMinimized) el.classList.add("floating-minimized");
+  if (!el.style.top) { el.style.top = "70px"; el.style.left = "40px"; }
+  el.insertAdjacentHTML("afterbegin", `
+    <div class="float-drag-handle">
+      <span class="float-drag-grip">&#9776; Card 3 &middot; Drag to move</span>
+      <span class="float-header-actions">
+        <button onclick="toggleMinimizeElectricalCard()" title="Minimize">&#8211;</button>
+        <button onclick="closeFloatingCardOnly()" title="Close">&times;</button>
+      </span>
+    </div>
+  `);
+  const grip = el.querySelector(".float-drag-grip");
+  let dragging = false, offsetX = 0, offsetY = 0;
+  function startDrag(clientX, clientY) {
+    dragging = true;
+    offsetX = clientX - el.offsetLeft;
+    offsetY = clientY - el.offsetTop;
+  }
+  function moveDrag(clientX, clientY) {
+    if (!dragging) return;
+    el.style.left = `${Math.max(0, clientX - offsetX)}px`;
+    el.style.top = `${Math.max(0, clientY - offsetY)}px`;
+  }
+  grip.addEventListener("mousedown", (e) => { startDrag(e.clientX, e.clientY); e.preventDefault(); });
+  window.addEventListener("mousemove", (e) => moveDrag(e.clientX, e.clientY));
+  window.addEventListener("mouseup", () => { dragging = false; });
+  grip.addEventListener("touchstart", (e) => { const t = e.touches[0]; startDrag(t.clientX, t.clientY); }, { passive: true });
+  window.addEventListener("touchmove", (e) => { if (dragging) { const t = e.touches[0]; moveDrag(t.clientX, t.clientY); } }, { passive: true });
+  window.addEventListener("touchend", () => { dragging = false; });
+}
+function unfloatElectricalCard() {
+  const el = document.getElementById("electricalCard");
+  if (!el) return;
+  el.classList.remove("floating-card", "floating-minimized");
+  el.style.top = ""; el.style.left = "";
+  const handle = el.querySelector(".float-drag-handle");
+  if (handle) handle.remove();
+}
+
+function removeMedia(category, index) {
+  doAction(ticketId, "report_remove_media", { category, index, actor: session.name }, () => {
+    showToast("Photo removed");
+    render();
+  }, m => showToast(m));
+}
+function capturePerfGraph() {
+  const label = pseudoPhotoLabel("Performance Graph");
+  doAction(ticketId, "report_add_media", { category: "performance_graph", label, actor: session.name }, () => {
+    showToast("&#10003; Added");
+    render();
+  }, m => showToast(m));
+}
+function removePerfGraph(index) {
+  doAction(ticketId, "report_remove_media", { category: "performance_graph", index, actor: session.name }, () => {
+    showToast("Photo removed");
+    render();
+  }, m => showToast(m));
+}
+function renderSummary(t, editable) {
+  const s = t.report.summary;
+  return `
+    <h2>5. Summary (Engineer)</h2>
+    <div class="field-row">
+      <div><label>Peak Sun Hours (PSH)</label>${editable ? `<input id="sum-psh" type="text" value="${s.psh || ""}">` : `<div class="small" style="padding:6px 0;">${s.psh || "—"}</div>`}</div>
+      <div><label>Overall System Status</label>${editable ? `<select id="sum-status">
+          <option value="">Select Status</option>
+          <option value="good" ${s.overall_status === "good" ? "selected" : ""}>Good</option>
+          <option value="fair" ${s.overall_status === "fair" ? "selected" : ""}>Fair — needs attention</option>
+          <option value="poor" ${s.overall_status === "poor" ? "selected" : ""}>Poor — urgent follow-up</option>
+        </select>` : `<div class="small" style="padding:6px 0;">${s.overall_status || "—"}</div>`}</div>
+    </div>
+    <div class="field-row">
+      <div><label>Total 1-Year Generation (kWh)</label>${editable ? `<input id="sum-yearly" type="text" value="${s.yearly_generation_kwh || ""}">` : `<div class="small" style="padding:6px 0;">${s.yearly_generation_kwh || "—"}</div>`}</div>
+      <div><label>Avg. Monthly Generation (kWh)</label>${editable ? `<input id="sum-monthly" type="text" value="${s.avg_monthly_generation_kwh || ""}">` : `<div class="small" style="padding:6px 0;">${s.avg_monthly_generation_kwh || "—"}</div>`}</div>
+    </div>
+    <label>Engineer's Performance Assessment Comments</label>
+    ${editable ? `<textarea id="sum-comments" rows="3">${s.engineer_comments || ""}</textarea>` : `<p class="small">${s.engineer_comments || "—"}</p>`}
+    ${editable ? `<button class="secondary" onclick="saveSummary()">Save section</button>` : ""}
+    <div class="divider"></div>
+    <label>System Performance Graph</label>
+    <div class="photo-thumb-grid">
+      ${(s.performance_graph || []).map((label, i) => `
+        <div class="photo-thumb">
+          <img src="${pseudoPhotoDataUri(label, "#334155")}" alt="${label}">
+          ${editable ? `<button class="photo-thumb-remove" onclick="removePerfGraph(${i})" title="Remove">&times;</button>` : ""}
+        </div>
+      `).join("")}
+      ${editable ? `<div class="photo-capture-tile" onclick="capturePerfGraph()"><div style="font-size:20px;">&#128247;</div><div>Add</div></div>` : ""}
+      ${!editable && (s.performance_graph || []).length === 0 ? `<p class="small">None</p>` : ""}
+    </div>
+  `;
+}
+
+function renderNotes(t, editable) {
+  const n = t.report.report_notes;
+  return `
+    <h2>Report &amp; Notes</h2>
+    <div class="report-item-row">
+      <div class="report-item-name">Performance Report</div>
+      ${editable ? `<div class="ar-choice">
+          <label><input type="radio" name="notes-result" value="accept" ${n.performance_report_result === "accept" ? "checked" : ""}> Accept</label>
+          <label><input type="radio" name="notes-result" value="reject" ${n.performance_report_result === "reject" ? "checked" : ""}> Reject</label>
+        </div>
+        <div class="report-item-remarks"><input type="text" id="notes-remarks" placeholder="Remarks" value="${n.remarks || ""}"></div>`
+        : `<span class="status-chip ${n.performance_report_result === "accept" ? "chip-pass" : n.performance_report_result === "reject" ? "chip-fail" : "chip-pending"}">${n.performance_report_result || "—"}</span><span class="small">${n.remarks || ""}</span>`}
+    </div>
+    <label style="margin-top:10px;">Additional Notes/Remarks</label>
+    ${editable ? `<textarea id="notes-additional" rows="3">${n.additional_notes || ""}</textarea>` : `<p class="small">${n.additional_notes || "—"}</p>`}
+    ${editable ? `<button class="secondary" onclick="saveNotes()">Save section</button>` : ""}
+  `;
+}
+
+function renderInstallation(t, editable) {
+  const i = t.report.installation_improvement;
+  return `
+    <h2>Installation Improvement &amp; Site Enhancement (Aesthetic Check)</h2>
+    <label>1. Additional Site Improvement Performed</label>
+    ${editable ? `<div class="ar-choice">
+        <label><input type="radio" name="inst-yn" value="yes" ${i.site_improvement_performed === "yes" ? "checked" : ""}> Yes</label>
+        <label><input type="radio" name="inst-yn" value="no" ${i.site_improvement_performed === "no" ? "checked" : ""}> No</label>
+      </div>` : `<p class="small">${i.site_improvement_performed || "—"}</p>`}
+    <label style="margin-top:10px;">Engineer Comments</label>
+    ${editable ? `<textarea id="inst-comments" rows="3">${i.engineer_comments || ""}</textarea>` : `<p class="small">${i.engineer_comments || "—"}</p>`}
+    ${editable ? `<button class="secondary" onclick="saveInstallation()">Save section</button>` : ""}
+  `;
+}
+
+function renderAdditionalMedia(t, editable) {
+  const list = t.report.additional_media || [];
+  return `
+    <h2>Additional Media</h2>
+    <p class="small">Extra files (PDF, MP3, MP4, etc.) related to this report. These won't appear in a generated PDF.</p>
+    ${editable ? `<div class="photo-upload-box" onclick="addMedia('additional')"><div class="photo-upload-icon">&#9729;&#8593;</div><div class="photo-upload-label">Add Media</div></div>` : ""}
+    <div class="photo-chip-list">${list.map(l => `<span class="badge badge-type">${l}</span>`).join("") || '<span class="small">None</span>'}</div>
+  `;
+}
+
+const SECTIONS = [
+  { key: "general", label: "1. General Information", render: renderGeneral, techEdit: true },
+  { key: "maintenance", label: "2. Maintenance Checklist", render: renderMaintenance, techEdit: true },
+  { key: "electrical", label: "3. Electrical Measurements", render: renderElectrical, techEdit: true },
+  { key: "media", label: "4. Media / Photo Upload", render: renderMedia, techEdit: true },
+  { key: "summary", label: "5. Summary (Engineer)", render: renderSummary, techEdit: false },
+  { key: "notes", label: "Report & Notes", render: renderNotes, techEdit: false },
+  { key: "installation", label: "Installation Improvement", render: renderInstallation, techEdit: false },
+  { key: "additional", label: "Additional Media", render: renderAdditionalMedia, techEdit: true },
+];
+
+// ---------- Format B (Troubleshoot/Rectification) section renderers ----------
+// Residential and C&I Troubleshoot/Rectification share this report shape —
+// diagnostic measurements + narrative issue/root-cause/action/conclusion
+// lines, instead of Format A's periodic maintenance checklist.
+
+function renderChecklistInfo(t, editable) {
+  const c = t.report.checklist_info;
+  const row = (label, id, val) => editable
+    ? `<div><label>${label}</label><input id="${id}" type="text" value="${val || ""}"></div>`
+    : `<div><label>${label}</label><div class="small" style="padding:6px 0;">${val || "—"}</div></div>`;
+  return `
+    <h2>Checklist Information</h2>
+    <div class="field-row">
+      ${row("Owner", "ci-owner", c.owner)}
+      ${row("System Capacity", "ci-capacity", c.system_capacity)}
+    </div>
+    <div class="field-row">
+      ${row("Contact No.", "ci-contact", c.contact_no)}
+      ${row("Inverter Model / S.N", "ci-invsn", c.inverter_model_sn)}
+    </div>
+    ${row("Panel Model", "ci-panel", c.panel_model)}
+    ${editable ? `<button class="secondary" onclick="saveChecklistInfo()">Save section</button>` : ""}
+  `;
+}
+
+const AC_THREE_PHASE_FIELDS = [
+  ["red_yellow", "Red to Yellow (Voltage)"], ["red_blue", "Red to Blue (Voltage)"], ["yellow_blue", "Yellow to Blue (Voltage)"],
+  ["red_neutral", "Red to Neutral (Voltage)"], ["yellow_neutral", "Yellow to Neutral (Voltage)"], ["blue_neutral", "Blue to Neutral (Voltage)"],
+  ["red_ground", "Red to Ground (Voltage)"], ["yellow_ground", "Yellow to Ground (Voltage)"], ["blue_ground", "Blue to Ground (Voltage)"],
+  ["neutral_ground", "Neutral to Ground (Voltage)"],
+];
+const AC_SINGLE_PHASE_FIELDS = [
+  ["live_neutral", "Live to Neutral (Voltage)"], ["live_ground", "Live to Ground (Voltage)"], ["neutral_ground", "Neutral to Ground (Voltage)"],
+];
+
+function remarkSelect(id, current, onchangeFn) {
+  return `<select id="${id}" onchange="${onchangeFn}">
+    <option value="" ${!current ? "selected" : ""}>Select...</option>
+    <option value="ok" ${current === "ok" ? "selected" : ""}>OK</option>
+    <option value="not_ok" ${current === "not_ok" ? "selected" : ""}>NOT OK</option>
+  </select>`;
+}
+function remarkText(remark) { return remark === "ok" ? "OK" : remark === "not_ok" ? "NOT OK" : "—"; }
+
+function measurementRow(group, key, label, entries, editable) {
+  const entry = entries[key] || { value: "", remark: null };
+  return `<tr>
+    <td>${label}</td>
+    <td>${editable ? `<input type="text" style="width:80px;" id="insp-val-${group}-${key}" value="${entry.value || ""}" onchange="saveInspectionMeasurement('${group}','${key}')">` : (entry.value || "—")}</td>
+    <td>${editable ? remarkSelect(`insp-rem-${group}-${key}`, entry.remark, `saveInspectionMeasurement('${group}','${key}')`) : remarkText(entry.remark)}</td>
+  </tr>`;
+}
+
+function renderAcPhaseTable(title, fields, group, entries, editable) {
+  return `
+    <label style="margin-top:10px;display:block;">${title}</label>
+    <div class="dc-table-wrap">
+      <table class="dc-table">
+        <thead><tr><th>Description</th><th>Measured Value (V)</th><th>Remark</th></tr></thead>
+        <tbody>${fields.map(([key, label]) => measurementRow(group, key, label, entries, editable)).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderDcStringsTable(strings, editable) {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+      <label style="margin:0;">DC Voltage (Voc) per String</label>
+      ${editable ? `<button class="secondary" onclick="addDcString()">+ Add String</button>` : ""}
+    </div>
+    <div class="dc-table-wrap">
+      <table class="dc-table">
+        <thead><tr><th>String</th><th>Voltage (V)</th><th>Remark</th><th>Pos to Ground (V)</th><th>Remark</th><th>Neg to Ground (V)</th><th>Remark</th>${editable ? "<th></th>" : ""}</tr></thead>
+        <tbody>
+          ${strings.map(s => `<tr>
+            <td>${s.label}</td>
+            <td>${editable ? `<input type="text" style="width:70px;" id="dcstr-v-${s.id}" value="${s.voltage_v || ""}" onchange="updateDcString(${s.id})">` : (s.voltage_v || "—")}</td>
+            <td>${editable ? remarkSelect(`dcstr-vr-${s.id}`, s.voltage_remark, `updateDcString(${s.id})`) : remarkText(s.voltage_remark)}</td>
+            <td>${editable ? `<input type="text" style="width:70px;" id="dcstr-pg-${s.id}" value="${s.positive_ground_v || ""}" onchange="updateDcString(${s.id})">` : (s.positive_ground_v || "—")}</td>
+            <td>${editable ? remarkSelect(`dcstr-pgr-${s.id}`, s.positive_ground_remark, `updateDcString(${s.id})`) : remarkText(s.positive_ground_remark)}</td>
+            <td>${editable ? `<input type="text" style="width:70px;" id="dcstr-ng-${s.id}" value="${s.negative_ground_v || ""}" onchange="updateDcString(${s.id})">` : (s.negative_ground_v || "—")}</td>
+            <td>${editable ? remarkSelect(`dcstr-ngr-${s.id}`, s.negative_ground_remark, `updateDcString(${s.id})`) : remarkText(s.negative_ground_remark)}</td>
+            ${editable ? `<td><button class="danger" style="margin:0;padding:4px 8px;" onclick="removeDcString(${s.id})">&times;</button></td>` : ""}
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderLineItemsTable(items, editable) {
+  return `
+    <label style="margin-top:10px;display:block;">Additional Diagnostic Tests</label>
+    <div class="dc-table-wrap">
+      <table class="dc-table">
+        <thead><tr><th>Description</th><th>Value</th><th>Remark</th></tr></thead>
+        <tbody>${items.map(item => `<tr>
+          <td>${item.label}</td>
+          <td>${editable ? `<input type="text" style="width:100px;" id="insp-val-line_items-${item.id}" value="${item.value || ""}" onchange="saveInspectionMeasurement('line_items','${item.id}')">` : (item.value || "—")}</td>
+          <td>${editable ? remarkSelect(`insp-rem-line_items-${item.id}`, item.remark, `saveInspectionMeasurement('line_items','${item.id}')`) : remarkText(item.remark)}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderInspectionChecklist(t, editable) {
+  const c = t.report.inspection_checklist;
+  return `
+    <h2>Inspection Checklist</h2>
+    ${renderAcPhaseTable("1. Multimeter - AC Voltage 3 Phase (Red, Yellow, Blue, Neutral, Ground)", AC_THREE_PHASE_FIELDS, "ac_three_phase", c.ac_three_phase, editable)}
+    ${renderAcPhaseTable("2. Multimeter - AC Voltage Single Phase (Live, Neutral, Ground)", AC_SINGLE_PHASE_FIELDS, "ac_single_phase", c.ac_single_phase, editable)}
+    <div class="divider"></div>
+    <label style="display:block;">3. Multimeter - DC Voltage (Voc - Positive &amp; Negative), Ground</label>
+    ${renderDcStringsTable(c.dc_strings, editable)}
+    <div class="divider"></div>
+    ${renderLineItemsTable(c.line_items, editable)}
+  `;
+}
+
+function renderIntake(t, editable) {
+  const g = t.report.intake;
+  const row = (label, id, val) => editable
+    ? `<div><label>${label}</label><input id="${id}" type="text" value="${val || ""}"></div>`
+    : `<div><label>${label}</label><div class="small" style="padding:6px 0;">${val || "—"}</div></div>`;
+  const dateRow = (label, id, val) => `<div><label>${label}</label>${editable ? `<input id="${id}" type="date" value="${val || ""}">` : `<div class="small" style="padding:6px 0;">${val || "—"}</div>`}</div>`;
+  const timeRow = (label, id, val) => `<div><label>${label}</label>${editable ? `<input id="${id}" type="time" value="${val || ""}">` : `<div class="small" style="padding:6px 0;">${val || "—"}</div>`}</div>`;
+  return `
+    <h2>1. General Information</h2>
+    <div class="field-row">
+      ${dateRow("Date Report Received", "int-date-recv", g.date_report_received)}
+      ${timeRow("Time Report Received", "int-time-recv", g.time_report_received)}
+    </div>
+    <div class="field-row">
+      ${row("Received By", "int-recvby", g.received_by)}
+      ${dateRow("Date Attended Site", "int-date-att", g.date_attended_site)}
+    </div>
+    <div class="field-row">
+      ${timeRow("Time Attended Site", "int-time-att", g.time_attended_site)}
+      ${row("Affected Components (comma separated)", "int-affected", g.affected_components)}
+    </div>
+    ${editable ? `<button class="secondary" onclick="saveIntake()">Save section</button>` : ""}
+  `;
+}
+
+function renderNarrativeSection(t, editable, sectionKey, sectionLabel) {
+  const lines = t.report[sectionKey] || [];
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 style="margin:0;">${sectionLabel}</h2>
+      ${editable ? `<button class="secondary" onclick="addNarrativeLine('${sectionKey}')">+ Add Line</button>` : ""}
+    </div>
+    ${lines.map((line, idx) => `
+      <div class="report-item-row" style="flex-direction:column;align-items:stretch;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="small" style="width:20px;">${idx + 1}</span>
+          ${editable
+            ? `<input type="text" style="flex:1;" id="narr-${sectionKey}-${line.id}" value="${line.text || ""}" placeholder="Enter details..." onchange="updateNarrativeLine('${sectionKey}', ${line.id})">`
+            : `<span class="small" style="flex:1;">${line.text || "—"}</span>`}
+          ${editable ? `<button class="danger" style="margin:0;padding:4px 8px;" onclick="removeNarrativeLine('${sectionKey}', ${line.id})">&times;</button>` : ""}
+        </div>
+        <div class="photo-thumb-grid" style="margin-top:6px;">
+          ${(line.photos || []).map((label, i) => `
+            <div class="photo-thumb">
+              <img src="${pseudoPhotoDataUri(label, '#334155')}" alt="${label}">
+              ${editable ? `<button class="photo-thumb-remove" onclick="removeNarrativePhoto('${sectionKey}', ${line.id}, ${i})" title="Remove">&times;</button>` : ""}
+            </div>
+          `).join("")}
+          ${editable && (line.photos || []).length < 10 ? `<div class="photo-capture-tile" onclick="addNarrativePhoto('${sectionKey}', ${line.id})"><div style="font-size:16px;">&#128247;</div><div style="font-size:11px;">Add Photo</div></div>` : ""}
+        </div>
+      </div>
+    `).join("") || `<p class="small">No lines added.</p>`}
+  `;
+}
+
+function renderSignatures(t, editable) {
+  const s = t.report.signatures;
+  const ersOptions = allAccounts.filter(a => ["engineer", "technician"].includes(a.role));
+  return `
+    <h2>Signatures</h2>
+    <div class="field-row">
+      <div><label>Customer Name</label>${editable ? `<input id="sig-customer" type="text" value="${s.customer_name || ""}">` : `<div class="small" style="padding:6px 0;">${s.customer_name || "—"}</div>`}</div>
+      <div><label>ERS PIC</label>${editable ? `<select id="sig-pic"><option value="">Select…</option>${ersOptions.map(a => `<option value="${a.name}" ${s.ers_pic === a.name ? "selected" : ""}>${a.name}</option>`).join("")}</select>` : `<div class="small" style="padding:6px 0;">${s.ers_pic || "—"}</div>`}</div>
+    </div>
+    ${editable ? `<button class="secondary" onclick="saveSignatures()">Save section</button>` : ""}
+  `;
+}
+
+function renderSitePhotos(t, editable) {
+  const list = t.report.site_photos || [];
+  return `
+    <h2>Site Photos</h2>
+    <div class="photo-thumb-grid">
+      ${list.map((label, i) => `
+        <div class="photo-thumb">
+          <img src="${pseudoPhotoDataUri(label, '#334155')}" alt="${label}">
+          ${editable ? `<button class="photo-thumb-remove" onclick="removeMedia('site_photos', ${i})" title="Remove">&times;</button>` : ""}
+        </div>
+      `).join("")}
+      ${editable ? `<div class="photo-capture-tile" onclick="addMedia('site_photos')"><div style="font-size:20px;">&#128247;</div><div>Add Photo</div></div>` : ""}
+      ${!editable && list.length === 0 ? `<p class="small">None</p>` : ""}
+    </div>
+  `;
+}
+
+const SECTIONS_TROUBLESHOOTING = [
+  { key: "checklist_info", label: "Checklist Information", render: renderChecklistInfo, techEdit: true },
+  { key: "inspection", label: "Inspection Checklist", render: renderInspectionChecklist, techEdit: true },
+  { key: "intake", label: "1. General Information", render: renderIntake, techEdit: true },
+  { key: "reported_issues", label: "2. Reported Issues", render: (t, e) => renderNarrativeSection(t, e, "reported_issues", "2. Reported Issues"), techEdit: true },
+  { key: "root_causes", label: "3. Root Causes", render: (t, e) => renderNarrativeSection(t, e, "root_causes", "3. Root Causes"), techEdit: true },
+  { key: "actions_taken", label: "4. Actions Taken", render: (t, e) => renderNarrativeSection(t, e, "actions_taken", "4. Actions Taken"), techEdit: true },
+  { key: "conclusions", label: "5. Conclusions", render: (t, e) => renderNarrativeSection(t, e, "conclusions", "5. Conclusions"), techEdit: true },
+  { key: "remarks", label: "6. Remarks", render: (t, e) => renderNarrativeSection(t, e, "remarks", "6. Remarks"), techEdit: true },
+  { key: "installation", label: "Installation Improvement", render: renderInstallation, techEdit: false },
+  { key: "additional", label: "Additional Media", render: renderAdditionalMedia, techEdit: true },
+  { key: "signatures", label: "Signatures", render: renderSignatures, techEdit: true },
+  { key: "sitephotos", label: "Site Photos", render: renderSitePhotos, techEdit: true },
+];
+
+// Picks the right section list for this ticket's report format — Format A
+// (residential) is the default so every ticket type except the
+// troubleshooting ones keeps working exactly as before.
+function getSections(t) {
+  return t.report.format === "troubleshooting" ? SECTIONS_TROUBLESHOOTING : SECTIONS;
+}
+
+// ---------- View assembly ----------
+
+function renderDesktop(t) {
+  const sections = getSections(t);
+  // Fasa 8 audit (5 Okt) — a report that's been submitted/approved must be
+  // read-only in the UI too, not just rejected silently by the backend:
+  // editable used to be hardcoded `true` here regardless of report status,
+  // so admin/engineer/CS could edit an already-approved report with no
+  // warning at all. Now it follows report.status, same as the badge above.
+  // Only whoever fills in the report (technician / engineer) can edit; HOD and CS read only.
+  const editable = t.report.status === "draft" && canDo(session.role, "report_edit");
+  document.getElementById("root").innerHTML =
+    `<a class="back-link" href="ticket-detail.html?id=${t.id}">&larr; Back to Ticket</a>` +
+    renderHeaderCard(t) +
+    sections.map(s => `<div class="card"${s.key === "electrical" ? ' id="electricalCard"' : ""}>${s.render(t, editable)}</div>`).join("");
+}
+
+function renderTechnician(t) {
+  const sections = getSections(t);
+  // Phone view: every section is shown one after another on a single scrolling page
+  // (no section drop-down). Each section keeps its own edit rule:
+  // engineer-only sections (techEdit false) are locked for technicians, not for the engineer,
+  // and nothing is editable once the report has left Draft.
+  const draft = t.report.status === "draft";
+  document.getElementById("root").innerHTML =
+    `<a class="back-link" href="${jobLink(t)}?id=${t.id}">&larr; Back to Job</a>` +
+    renderHeaderCard(t) +
+    sections.map(s => {
+      const editable = (s.techEdit || session.role === "engineer") && draft;
+      return `<div class="card"${s.key === "electrical" ? ' id="electricalCard"' : ""}>${s.render(t, editable)}</div>`;
+    }).join("");
+}
+function switchSection(key) { currentSectionKey = key; render(); }
+
+function renderCurrentView() {
+  if (mobileView) renderTechnician(ticket); else renderDesktop(ticket);
+  addSaveAllBar();
+}
+
+// "Save all": presses every "Save …" button on the page one after another, so text typed in
+// several sections isn't lost when one section is saved (each save re-draws the page).
+function saveButtons() {
+  return [...document.querySelectorAll('#root .card button[onclick^="save"]')].filter(b => !b.disabled && b.id !== "saveAllBtn");
+}
+function addSaveAllBar() {
+  if (!ticket || ticket.report.status !== "draft" || !saveButtons().length) return;
+  // The per-section Save buttons are hidden (Save all presses them for you).
+  if (!document.getElementById("saveAllStyle")) document.head.insertAdjacentHTML("beforeend",
+    `<style id="saveAllStyle">#root .card button[onclick^="save"]:not(#saveAllBtn) { display: none; }</style>`);
+  document.getElementById("root").insertAdjacentHTML("beforeend",
+    `<div class="card" style="text-align:center;position:sticky;bottom:10px;z-index:5;box-shadow:0 -4px 16px rgba(0,0,0,.12);">
+       <button id="saveAllBtn" style="width:100%;padding:14px;font-size:16px;" onclick="saveAll()">Save all sections</button>
+       <p class="small" style="margin:8px 0 0;color:#6b7280;">Saves every section on this page in one go.</p>
+     </div>`);
+}
+async function saveAll() {
+  const btns = saveButtons();
+  const btn = document.getElementById("saveAllBtn");
+  if (!btns.length) return;
+  btn.disabled = true; btn.textContent = "Saving…";
+  const realRender = render, realToast = showToast;
+  const errors = [];
+  for (const b of btns) {
+    await new Promise(resolve => {
+      const timer = setTimeout(resolve, 15000);
+      const done = () => { clearTimeout(timer); resolve(); };
+      render = () => { done(); };                              // finish this step instead of redrawing
+      showToast = m => { errors.push(m); done(); };            // a failed save: remember it, carry on
+      try { new Function(b.getAttribute("onclick")).call(b); } catch (e) { errors.push(e.message); done(); }
+    });
+  }
+  render = realRender; showToast = realToast;
+  await render();
+  if (errors.length) showToast("Some sections were not saved: " + [...new Set(errors)].join("; "));
+  else showToast("All sections saved.");
+}
+
+// ---------- Save handlers ----------
+
+function saveGeneral() {
+  const patch = {
+    date_of_inspection: fieldVal("gen-date"), system_owner: fieldVal("gen-owner"), contact_no: fieldVal("gen-contact"),
+    system_location: fieldVal("gen-location"), system_size_kwp: fieldVal("gen-size"),
+    inverter_model: fieldVal("gen-invmodel"), inverter_sn: fieldVal("gen-invsn"),
+  };
+  doAction(ticketId, "report_section", { section: "general", patch, actor: session.name }, render, m => showToast(m));
+}
+function saveMaintenance() {
+  const items = ticket.report.maintenance_checklist;
+  const next = () => {
+    if (!items.length) { render(); return; }
+    const item = items.shift();
+    const checked = document.querySelector(`input[name="mi-${item.id}"]:checked`);
+    const result = checked ? checked.value : null;
+    const remarksEl = document.getElementById(`mi-remarks-${item.id}`);
+    const extraEl = document.getElementById(`mi-extra-${item.id}`);
+    doAction(ticketId, "report_checklist_item", {
+      item_id: item.id, result, remarks: remarksEl ? remarksEl.value : "", extra: extraEl ? extraEl.value : "", actor: session.name,
+    }, next, m => showToast(m));
+  };
+  next();
+}
+function saveElectrical() {
+  doAction(ticketId, "report_section", { section: "electrical", patch: { ac_phase_type: fieldVal("elec-phase") }, actor: session.name }, render, m => showToast(m));
+}
+function saveAcMeasurements() {
+  const e = ticket.report.electrical;
+  const phase = e.ac_phase_type;
+  if (!phase) return;
+  const patch = Object.assign({}, e.ac_measurements);
+  const updated = {};
+  acFieldList(phase).forEach(([key]) => { updated[key] = fieldVal(`ac-${key}`); });
+  patch[phase] = updated;
+  doAction(ticketId, "report_section", { section: "electrical", patch: { ac_measurements: patch }, actor: session.name }, render, m => showToast(m));
+}
+function addInverter() { doAction(ticketId, "report_add_inverter", { actor: session.name }, render, m => showToast(m)); }
+function removeInverter(id) {
+  if (!confirm("Remove this inverter and all its MPPT/string data?")) return;
+  doAction(ticketId, "report_remove_inverter", { inverter_id: id, actor: session.name }, render, m => showToast(m));
+}
+function addMppt(invId) { doAction(ticketId, "report_add_mppt", { inverter_id: invId, actor: session.name }, render, m => showToast(m)); }
+function removeMppt(invId, mpptId) {
+  if (!confirm("Remove this MPPT channel and its strings?")) return;
+  doAction(ticketId, "report_remove_mppt", { inverter_id: invId, mppt_id: mpptId, actor: session.name }, render, m => showToast(m));
+}
+function addString(invId, mpptId) { doAction(ticketId, "report_add_string", { inverter_id: invId, mppt_id: mpptId, actor: session.name }, render, m => showToast(m)); }
+function removeString(invId, mpptId, stringId) {
+  doAction(ticketId, "report_remove_string", { inverter_id: invId, mppt_id: mpptId, string_id: stringId, actor: session.name }, render, m => showToast(m));
+}
+function updateString(invId, mpptId, stringId) {
+  doAction(ticketId, "report_update_string", {
+    inverter_id: invId, mppt_id: mpptId, string_id: stringId,
+    voltage_v: fieldVal(`str-v-${invId}-${mpptId}-${stringId}`),
+    pos_to_ground_v: fieldVal(`str-pg-${invId}-${mpptId}-${stringId}`),
+    neg_to_ground_v: fieldVal(`str-ng-${invId}-${mpptId}-${stringId}`),
+    status: fieldVal(`str-st-${invId}-${mpptId}-${stringId}`),
+    actor: session.name,
+  }, render, m => showToast(m));
+}
+function addMedia(category) {
+  const label = prompt("Photo/file label (this demo can't capture real media — enter a filename to represent it):", `${category}-${Date.now()}.jpg`);
+  if (!label) return;
+  doAction(ticketId, "report_add_media", { category, label, actor: session.name }, render, m => showToast(m));
+}
+function saveSummary() {
+  const patch = { psh: fieldVal("sum-psh"), overall_status: fieldVal("sum-status"), yearly_generation_kwh: fieldVal("sum-yearly"),
+    avg_monthly_generation_kwh: fieldVal("sum-monthly"), engineer_comments: fieldVal("sum-comments") };
+  doAction(ticketId, "report_section", { section: "summary", patch, actor: session.name }, render, m => showToast(m));
+}
+function saveNotes() {
+  const checked = document.querySelector('input[name="notes-result"]:checked');
+  const patch = { performance_report_result: checked ? checked.value : null, remarks: fieldVal("notes-remarks"), additional_notes: fieldVal("notes-additional") };
+  doAction(ticketId, "report_section", { section: "report_notes", patch, actor: session.name }, render, m => showToast(m));
+}
+function saveInstallation() {
+  const checked = document.querySelector('input[name="inst-yn"]:checked');
+  const patch = { site_improvement_performed: checked ? checked.value : null, engineer_comments: fieldVal("inst-comments") };
+  doAction(ticketId, "report_section", { section: "installation_improvement", patch, actor: session.name }, render, m => showToast(m));
+}
+// ---------- Format B save handlers ----------
+
+function saveChecklistInfo() {
+  const patch = {
+    owner: fieldVal("ci-owner"), system_capacity: fieldVal("ci-capacity"),
+    contact_no: fieldVal("ci-contact"), inverter_model_sn: fieldVal("ci-invsn"), panel_model: fieldVal("ci-panel"),
+  };
+  doAction(ticketId, "report_section", { section: "checklist_info", patch, actor: session.name }, render, m => showToast(m));
+}
+function saveInspectionMeasurement(group, key) {
+  const value = fieldVal(`insp-val-${group}-${key}`);
+  const remarkEl = document.getElementById(`insp-rem-${group}-${key}`);
+  const remark = remarkEl ? (remarkEl.value || null) : null;
+  doAction(ticketId, "report_inspection_measurement", { group, key, value, remark, actor: session.name }, render, m => showToast(m));
+}
+function addDcString() { doAction(ticketId, "report_add_dc_string", { actor: session.name }, render, m => showToast(m)); }
+function removeDcString(id) {
+  if (!confirm("Remove this DC string?")) return;
+  doAction(ticketId, "report_remove_dc_string", { string_id: id, actor: session.name }, render, m => showToast(m));
+}
+function updateDcString(stringId) {
+  const remEl = id => { const el = document.getElementById(id); return el ? (el.value || null) : null; };
+  doAction(ticketId, "report_update_dc_string", {
+    string_id: stringId,
+    voltage_v: fieldVal(`dcstr-v-${stringId}`),
+    positive_ground_v: fieldVal(`dcstr-pg-${stringId}`),
+    negative_ground_v: fieldVal(`dcstr-ng-${stringId}`),
+    voltage_remark: remEl(`dcstr-vr-${stringId}`),
+    positive_ground_remark: remEl(`dcstr-pgr-${stringId}`),
+    negative_ground_remark: remEl(`dcstr-ngr-${stringId}`),
+    actor: session.name,
+  }, render, m => showToast(m));
+}
+function saveIntake() {
+  const patch = {
+    date_report_received: fieldVal("int-date-recv"), time_report_received: fieldVal("int-time-recv"),
+    received_by: fieldVal("int-recvby"), date_attended_site: fieldVal("int-date-att"),
+    time_attended_site: fieldVal("int-time-att"), affected_components: fieldVal("int-affected"),
+  };
+  doAction(ticketId, "report_section", { section: "intake", patch, actor: session.name }, render, m => showToast(m));
+}
+function addNarrativeLine(section) { doAction(ticketId, "report_narrative_add_line", { section, actor: session.name }, render, m => showToast(m)); }
+function updateNarrativeLine(section, lineId) {
+  const text = fieldVal(`narr-${section}-${lineId}`);
+  doAction(ticketId, "report_narrative_update_line", { section, line_id: lineId, text, actor: session.name }, render, m => showToast(m));
+}
+function removeNarrativeLine(section, lineId) {
+  if (!confirm("Remove this line?")) return;
+  doAction(ticketId, "report_narrative_remove_line", { section, line_id: lineId, actor: session.name }, render, m => showToast(m));
+}
+function addNarrativePhoto(section, lineId) {
+  const label = prompt("Photo label (this demo can't capture real media — enter a filename to represent it):", `${section}-${Date.now()}.jpg`);
+  if (!label) return;
+  doAction(ticketId, "report_narrative_add_photo", { section, line_id: lineId, label, actor: session.name }, render, m => showToast(m));
+}
+function removeNarrativePhoto(section, lineId, index) {
+  doAction(ticketId, "report_narrative_remove_photo", { section, line_id: lineId, index, actor: session.name }, render, m => showToast(m));
+}
+function saveSignatures() {
+  const patch = { customer_name: fieldVal("sig-customer"), ers_pic: fieldVal("sig-pic") };
+  doAction(ticketId, "report_section", { section: "signatures", patch, actor: session.name }, render, m => showToast(m));
+}
+
+function doSubmitReport() {
+  doAction(ticketId, "submit_report", { actor: session.name }, render, m => err("hdrError", m));
+}
+function approveReport() {
+  doAction(ticketId, "report_approve", { actor: session.name }, render, m => err("hdrError", m));
+}
+function rejectReportForm() {
+  const reason = prompt("Reason the report is being rejected? (it goes back to Draft for the technician to fix)");
+  if (!reason) return;
+  doAction(ticketId, "report_reject", { reason, actor: session.name }, render, m => err("hdrError", m));
+}
+
+async function render() {
+  try {
+    ticket = await api(`/api/tickets/${ticketId}`);
+  } catch (e) {
+    document.getElementById("root").innerHTML = `<div class="empty">Job not found.</div>`;
+    return;
+  }
+  const keepY = window.scrollY;
+  renderCurrentView();
+  window.scrollTo(0, keepY); // stay where you were after Save, instead of jumping to the top
+  if (galleryState && !electricalCardManuallyClosed) floatElectricalCard();
+}
+
+async function init() {
+  // Fasa 6 audit (3 Okt) — same "stuck Loading…" bug class already fixed in
+  // checklist.html: without this try/catch, a failed /api/accounts call
+  // (server restart, network blip) left this await's rejection uncaught,
+  // render() never ran, and the page stayed on the static "Loading…"
+  // placeholder forever with no way to recover short of a manual refresh.
+  try {
+    const { accounts } = await api("/api/accounts");
+    allAccounts = accounts;
+  } catch (e) {
+    document.getElementById("root").innerHTML = `<div class="empty">Couldn't load this report — ${e.message || "please refresh the page."}</div>`;
+    return;
+  }
+  render();
+}
+init();
+</script>
+</body>
+</html>

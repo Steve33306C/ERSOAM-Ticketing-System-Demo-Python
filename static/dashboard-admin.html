@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard — Admin — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("admin");
+renderShell({
+  active: "dashboard", role: "admin", session,
+  pageTitle: "Dashboard", pageSubtitle: "What needs your intervention as supervisor, right now.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="stat-grid dashboard-sticky-stats">
+    <div class="stat-card" style="border-color:#b91c1c;cursor:pointer;" onclick="scrollToSection('section-sla')"><div class="stat-icon">${icon("warning")}</div><div><div class="stat-num" id="stat-sla" style="color:#b91c1c;">—</div><div class="stat-label" style="color:#b91c1c;">SLA BREACH</div></div></div>
+    <div class="stat-card" style="border-color:#b91c1c;cursor:pointer;" onclick="scrollToSection('section-reschedule')"><div class="stat-icon">${icon("reschedule")}</div><div><div class="stat-num" id="stat-reschedule" style="color:#b91c1c;">—</div><div class="stat-label" style="color:#b91c1c;">RESCHEDULE NOT CLEARED</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-unscheduled')"><div class="stat-icon">${icon("calendar")}</div><div><div class="stat-num" id="stat-unscheduled">—</div><div class="stat-label">UNSCHEDULED &gt; 7 DAYS</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-checklist')"><div class="stat-icon">${icon("shield")}</div><div><div class="stat-num" id="stat-checklist">—</div><div class="stat-label">SAFETY CHECKLIST UNFINISHED</div></div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToSection('section-mine')"><div class="stat-icon">${icon("user")}</div><div><div class="stat-num" id="stat-mine">—</div><div class="stat-label">YOUR OWN TICKETS</div></div></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-sla" style="border:1.5px solid #b91c1c;background:#fef2f2;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h2 style="color:#b91c1c;margin:0;">${icon("warning")} SLA Breach</h2>
+      <button id="slaSortBtn" class="sort-toggle-icon-btn" onclick="toggleSlaSort()" title="Toggle sort order"></button>
+    </div>
+    <p class="small">Engineer took longer than 3 days to review, or CS took longer than 2 days to close an approved ticket.</p>
+    <div id="slaList"></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-reschedule" style="border:1.5px solid #b91c1c;background:#fef2f2;">
+    <h2 style="color:#b91c1c;">${icon("reschedule")} Reschedule not yet cleared</h2>
+    <p class="small">A technician requested a reschedule more than 2 days ago and CS hasn't booked a new date yet.</p>
+    <div id="rescheduleList"></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-unscheduled">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h2 style="margin:0;">Unscheduled more than 7 days</h2>
+      <button id="unscheduledSortBtn" class="sort-toggle-icon-btn" onclick="toggleUnscheduledSort()" title="Toggle sort order"></button>
+    </div>
+    <p class="small">Ticket created but nobody has scheduled a visit yet — likely fell through the cracks.</p>
+    <div id="unscheduledList"></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-checklist">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h2 style="margin:0;">Safety checklist unfinished</h2>
+      <button id="checklistSortBtn" class="sort-toggle-icon-btn" onclick="toggleChecklistSort()" title="Toggle sort order"></button>
+    </div>
+    <p class="small">Visit day passed without the safety checklist being completed.</p>
+    <div id="checklistList"></div>
+  </div>
+
+  <div class="card dashboard-section" id="section-mine">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h2 style="margin:0;">Your own tickets (as CS)</h2>
+      <button id="mineSortBtn" class="sort-toggle-icon-btn" onclick="toggleMineSort()" title="Toggle sort order"></button>
+    </div>
+    <p class="small">You act as both supervisor and CS. Kept separate so your own action items don't bury — or get
+    buried by — the supervisory view above.</p>
+    <div id="mineList"></div>
+  </div>
+`;
+
+// Skeleton placeholders while the first render() is still waiting on the
+// API — render() below overwrites these same containers with real content
+// exactly as before.
+["slaList", "rescheduleList", "unscheduledList", "checklistList", "mineList"].forEach(id => {
+  document.getElementById(id).innerHTML = skeletonRows(2);
+});
+
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ---------- Sort toggles (each section sorts independently) ----------
+let _slaSortDir = "asc";
+function toggleSlaSort() { _slaSortDir = _slaSortDir === "asc" ? "desc" : "asc"; render(); }
+
+let _unscheduledSortDir = "asc";
+function toggleUnscheduledSort() { _unscheduledSortDir = _unscheduledSortDir === "asc" ? "desc" : "asc"; render(); }
+
+let _checklistSortDir = "asc";
+function toggleChecklistSort() { _checklistSortDir = _checklistSortDir === "asc" ? "desc" : "asc"; render(); }
+
+let _mineSortDir = "asc";
+function toggleMineSort() { _mineSortDir = _mineSortDir === "asc" ? "desc" : "asc"; render(); }
+
+const WORKFLOW_ORDER = Object.keys(STATE_LABELS); // created, scheduled, site_visit, report_drafting, engineer_review, approved, closed
+
+function ticketRow(t, note, sla) {
+  return `<div class="attention-item" style="cursor:pointer;" onclick="location.href='ticket-detail.html?id=${t.id}'">
+    <div>
+      <div class="t-title">${t.id} — ${t.title}</div>
+      <div class="t-meta">${t.client} · ${TYPE_LABELS[t.type] || t.type} · assignees: ${t.assignees.join(", ") || "none"}</div>
+    </div>
+    <div style="text-align:right;">
+      <span class="badge badge-progress">${STATE_LABELS[t.state] || t.state}</span>
+      ${sla ? `<div class="t-meta" style="color:${sla.color};font-weight:700;">${sla.label}</div>` : ""}
+      ${note ? `<div class="t-meta">${note}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function rescheduleRow(t) {
+  return `<div class="attention-item" style="border-left:3px solid #b91c1c;">
+    <div style="cursor:pointer;" onclick="location.href='ticket-detail.html?id=${t.id}'">
+      <div class="t-title">${t.id} — ${t.title}</div>
+      <div class="t-meta">${t.client} · ${TYPE_LABELS[t.type] || t.type}</div>
+      <div class="t-meta" style="color:#b91c1c;margin-top:4px;">Reason: ${t.reschedule_reason || "—"} · Requested: ${fmtTime(t.reschedule_requested_at)}</div>
+    </div>
+    <div style="text-align:right;">
+      <button class="mobile-btn" style="padding:6px 14px;font-size:12.5px;" onclick="doClearReschedule('${t.id}')">Mark as Rescheduled</button>
+    </div>
+  </div>`;
+}
+function doClearReschedule(ticketId) {
+  doAction(ticketId, "clear_reschedule", { actor: session.name }, () => render(), (msg) => showToast(msg));
+}
+
+function checklistRow(t, day) {
+  return `<div class="attention-item" style="cursor:pointer;" onclick="location.href='ticket-detail.html?id=${t.id}'">
+    <div>
+      <div class="t-title">${t.id} — ${t.client}</div>
+      <div class="t-meta">Visit day: ${day.date} · Technicians: ${(day.technicians || []).join(", ") || "—"}</div>
+    </div>
+    <span class="badge badge-stale">Unfinished</span>
+  </div>`;
+}
+
+async function render() {
+  // Fasa 8 audit (5 Okt) — same "stuck Loading…" bug class as B3
+  // (checklist.html): no try/catch around the initial API call, so a
+  // failed first load left the skeleton rows showing forever with no
+  // explanation, only self-healing on the next successful poll (4s later).
+  let tickets;
+  try {
+    tickets = (await api("/api/tickets")).tickets;
+  } catch (e) {
+    const msg = `<div class="empty">Couldn't load — ${e.message || "retrying…"}</div>`;
+    ["slaList", "rescheduleList", "unscheduledList", "checklistList", "mineList"].forEach(id => { document.getElementById(id).innerHTML = msg; });
+    return;
+  }
+
+  // ---------- SLA Breach ----------
+  let slaItems = [
+    ...tickets.filter(t => t.state === "engineer_review" && (slaInfo(t.report.submitted_at, 3) || {}).overdue)
+      .map(t => ({ t, since: t.report.submitted_at, note: "Awaiting engineer review", sla: slaInfo(t.report.submitted_at, 3) })),
+    ...tickets.filter(t => t.state === "approved" && (slaInfo(t.report.approved_at, 2) || {}).overdue)
+      .map(t => ({ t, since: t.report.approved_at, note: "Awaiting CS closure", sla: slaInfo(t.report.approved_at, 2) })),
+  ];
+  slaItems.sort((a, b) => _slaSortDir === "asc"
+    ? (a.since || "").localeCompare(b.since || "")
+    : (b.since || "").localeCompare(a.since || ""));
+
+  // ---------- Reschedule not cleared ----------
+  const needsReschedule = tickets.filter(t => t.reschedule_requested && minutesSince(t.reschedule_requested_at) > 2 * 1440);
+
+  // ---------- Unscheduled > 7 days ----------
+  const unscheduled = tickets.filter(t => t.state === "created" && t.event_log.length &&
+    minutesSince(t.event_log[t.event_log.length - 1].ts) > 7 * 1440);
+  unscheduled.sort((a, b) => {
+    const aTs = a.event_log[a.event_log.length - 1].ts;
+    const bTs = b.event_log[b.event_log.length - 1].ts;
+    return _unscheduledSortDir === "asc" ? aTs.localeCompare(bTs) : bTs.localeCompare(aTs);
+  });
+
+  // ---------- Safety checklist unfinished ----------
+  const unfinishedChecklists = [];
+  tickets.forEach(t => (t.visit_days || []).forEach(day => {
+    if (day.status === "unfinished") unfinishedChecklists.push({ t, day });
+  }));
+  unfinishedChecklists.sort((a, b) => _checklistSortDir === "asc"
+    ? a.day.date.localeCompare(b.day.date)
+    : b.day.date.localeCompare(a.day.date));
+
+  // ---------- Your own tickets (as CS) ----------
+  const mine = tickets.filter(t => t.state !== "closed" && t.assignees.includes(session.name));
+  mine.sort((a, b) => {
+    const rankA = WORKFLOW_ORDER.indexOf(a.state);
+    const rankB = WORKFLOW_ORDER.indexOf(b.state);
+    return _mineSortDir === "asc" ? rankA - rankB : rankB - rankA;
+  });
+
+  // ---------- Stat numbers ----------
+  document.getElementById("stat-sla").textContent = slaItems.length;
+  document.getElementById("stat-reschedule").textContent = needsReschedule.length;
+  document.getElementById("stat-unscheduled").textContent = unscheduled.length;
+  document.getElementById("stat-checklist").textContent = unfinishedChecklists.length;
+  document.getElementById("stat-mine").textContent = mine.length;
+
+  // ---------- Sort button icons (arrow only, no text) ----------
+  document.getElementById("slaSortBtn").innerHTML = _slaSortDir === "asc" ? "&#8593;" : "&#8595;";
+  document.getElementById("unscheduledSortBtn").innerHTML = _unscheduledSortDir === "asc" ? "&#8593;" : "&#8595;";
+  document.getElementById("checklistSortBtn").innerHTML = _checklistSortDir === "asc" ? "&#8593;" : "&#8595;";
+  document.getElementById("mineSortBtn").innerHTML = _mineSortDir === "asc" ? "&#8593;" : "&#8595;";
+
+  // ---------- Render lists ----------
+  document.getElementById("slaList").innerHTML = slaItems.length
+    ? slaItems.map(item => ticketRow(item.t, item.note, item.sla)).join("")
+    : emptyState("No SLA breaches right now — everything's on track.", "stopwatch");
+
+  document.getElementById("rescheduleList").innerHTML = needsReschedule.length
+    ? needsReschedule.map(t => rescheduleRow(t)).join("") : emptyState("Nothing waiting on a reschedule.", "reschedule");
+
+  document.getElementById("unscheduledList").innerHTML = unscheduled.length
+    ? unscheduled.map(t => ticketRow(t, `Last activity: ${fmtTime(t.event_log[t.event_log.length - 1].ts)}`)).join("")
+    : emptyState("Nothing sitting unscheduled that long.", "calendar");
+
+  document.getElementById("checklistList").innerHTML = unfinishedChecklists.length
+    ? unfinishedChecklists.map(({ t, day }) => checklistRow(t, day)).join("")
+    : emptyState("No unfinished safety checklists.", "shield");
+
+  document.getElementById("mineList").innerHTML = mine.length
+    ? mine.map(t => ticketRow(t)).join("")
+    : emptyState("No tickets assigned to you right now.", "ticket");
+}
+render();
+setInterval(render, 4000);
+</script>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Safety Checklists — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(); // any logged-in account
+renderShell({
+  active: "safety", role: session.role, session,
+  pageTitle: "Safety Checklists", pageSubtitle: "Every scheduled visit day across every ticket, and whether its safety checklist was completed.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <input id="checklistSearch" type="text" placeholder="Search by client, ticket, technician, or engineer…" style="margin-bottom:14px;">
+
+  <div class="tabs" id="statusTabs" style="margin-bottom:14px;">
+    <button class="tab active" data-status="all" onclick="setStatusFilter('all')">All</button>
+    <button class="tab" data-status="not_started" onclick="setStatusFilter('not_started')">Not Started</button>
+    <button class="tab" data-status="in_progress" onclick="setStatusFilter('in_progress')">In Progress</button>
+    <button class="tab" data-status="submitted" onclick="setStatusFilter('submitted')">Completed</button>
+    <button class="tab" data-status="unfinished" onclick="setStatusFilter('unfinished')">Unfinished</button>
+  </div>
+
+  <div class="card">
+    <div id="list"></div>
+  </div>
+`;
+document.getElementById("checklistSearch").addEventListener("input", render);
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #list with the real table exactly as
+// before.
+document.getElementById("list").innerHTML = skeletonRows(3);
+
+let _statusFilter = "all";
+function setStatusFilter(status) {
+  _statusFilter = status;
+  document.querySelectorAll("#statusTabs .tab").forEach(el => el.classList.toggle("active", el.dataset.status === status));
+  render();
+}
+
+// Sorts jobs (not individual rows) by their most recent visit day, newest first
+// by default. Days within the same job stay grouped together (see render())
+// so a 3-day job's rows never get scattered apart by other jobs' dates.
+let _sortDir = "desc";
+function toggleChecklistSort() { _sortDir = _sortDir === "asc" ? "desc" : "asc"; render(); }
+
+// Jobs with more than this many visit days collapse into one summary row by
+// default, so a multi-day job doesn't flood the table with repeated rows.
+// Only a true 1-day job stays flat, since there's nothing to collapse there.
+const GROUP_COLLAPSE_THRESHOLD = 1;
+let _expandedGroups = {};
+function toggleGroup(ticketId) {
+  _expandedGroups[ticketId] = !_expandedGroups[ticketId];
+  render();
+}
+
+// Date on top, time (no seconds) below — used for Start/Submit Time cells so
+// a narrow column doesn't force "30/09/2026, 9:24:56 am" to wrap awkwardly.
+function stackedTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const dateStr = d.toLocaleDateString();
+  const timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `<div>${dateStr}</div><div style="font-size:11px;color:var(--muted);">${timeStr}</div>`;
+}
+
+function durationLabel(day) {
+  const cl = day.checklist;
+  if (!cl || !cl.checklist_started_at) return "—";
+  if (!cl.checklist_completed_at) return "In progress";
+  const mins = Math.round((new Date(cl.checklist_completed_at) - new Date(cl.checklist_started_at)) / 60000);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+// Internal status key used for filtering — distinct from the visual badge text.
+function dayStatusKey(day) {
+  if (day.status === "submitted") return "submitted";
+  if (day.status === "unfinished") return "unfinished";
+  if (day.checklist && day.checklist.checklist_started_at) return "in_progress";
+  return "not_started";
+}
+
+function statusBadge(day) {
+  const key = dayStatusKey(day);
+  if (key === "submitted") return `<span class="badge badge-approved">Completed</span>`;
+  if (key === "unfinished") return `<span class="badge badge-stale">Unfinished</span>`;
+  if (key === "in_progress") return `<span class="badge badge-progress">In progress</span>`;
+  return `<span class="badge badge-open">Not started</span>`;
+}
+
+// Names are stored like "Technician - Ali"; the column header already says
+// "Technician", so strip the redundant prefix for display only.
+function shortName(name) {
+  return (name || "").replace(/^technician\s*-\s*/i, "").trim();
+}
+
+// Once submitted, show who actually filled and submitted the checklist
+// (accountability — could be just one of several assigned technicians).
+// Before that, fall back to the assigned names since no one has submitted yet.
+function technicianCell(day) {
+  const submittedBy = day.checklist && day.checklist.submitted_by;
+  if (submittedBy) return shortName(submittedBy);
+  const assigned = (day.technicians || []).map(shortName).join(", ") || "—";
+  return `<span style="color:var(--muted);font-style:italic;">${assigned}</span>`;
+}
+
+function reportLinkHtml(ticket) {
+  const r = ticket.report;
+  if (!r || r.status === "draft") return "";
+  return `<a class="chip-link" style="margin-left:10px;" href="report.html?id=${ticket.id}">Report &rarr;</a>`;
+}
+
+// isGroupContinuation = this row is the 2nd+ day of a multi-day job — shown
+// with a muted client name and a small arrow so it still reads as "same job"
+// even though every row is flat in the table (no expand/collapse anymore).
+// showReportLink is false for rows nested under a group summary row, since
+// the report belongs to the whole job (not a specific day) and already has
+// its own link on the summary row — repeating it on every day would look
+// like 3 separate reports when there's really only one.
+function checklistRowHtml(ticket, day, isGroupContinuation, showReportLink) {
+  const cl = day.checklist;
+  return `
+    <tr${isGroupContinuation ? ` class="sc-continuation" style="background:var(--content-bg);"` : ""}>
+      <td class="sc-id" style="white-space:nowrap;">
+        <div style="font-weight:800;color:var(--accent);font-size:13px;">${isGroupContinuation ? "&#8627; " : ""}SCL-${ticket.id}-${day.id}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">${TYPE_LABELS[ticket.type] || ticket.type}</div>
+      </td>
+      <td class="sc-client">${isGroupContinuation
+        ? `<span style="color:var(--muted);">${ticket.client}</span>`
+        : `<div style="font-weight:700;">${ticket.client}</div>`}</td>
+      <td class="sc-tech">${technicianCell(day)}</td>
+      <td class="sc-start">${stackedTime(cl && cl.checklist_started_at)}</td>
+      <td class="sc-submit">${stackedTime(cl && cl.checklist_completed_at)}</td>
+      <td class="sc-dur">${durationLabel(day)}</td>
+      <td class="sc-status">${statusBadge(day)}</td>
+      <td class="sc-actions" style="white-space:nowrap;">
+        <a class="chip-link" href="checklist.html?id=${ticket.id}&day=${day.id}">View</a>
+        ${showReportLink ? reportLinkHtml(ticket) : ""}
+      </td>
+    </tr>
+  `;
+}
+
+// One collapsed row standing in for a whole multi-day job. Click anywhere on
+// it to expand and reveal each day's row underneath (see render()). Carries
+// the report link, since the report is shared across the whole job.
+function groupSummaryRowHtml(ticket, days, expanded) {
+  const doneCount = days.filter(d => dayStatusKey(d) === "submitted").length;
+  const range = `${days[days.length - 1].date} – ${days[0].date}`;
+  const allTechnicians = [...new Set(days.map(d => (d.checklist && d.checklist.submitted_by) ? shortName(d.checklist.submitted_by) : null).filter(Boolean))];
+  const technicianSummary = allTechnicians.length
+    ? allTechnicians.join(", ")
+    : `<span style="color:var(--muted);font-style:italic;">${[...new Set(days.flatMap(d => (d.technicians || []).map(shortName)))].join(", ") || "—"}</span>`;
+  return `
+    <tr class="sc-group">
+      <td class="sc-id" style="cursor:pointer;white-space:nowrap;" onclick="toggleGroup('${ticket.id}')">
+        <div style="font-weight:800;color:var(--accent);font-size:13px;">${expanded ? "&#9660;" : "&#9654;"} ${ticket.id}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">${days.length} checklists</div>
+      </td>
+      <td class="sc-client" style="cursor:pointer;" onclick="toggleGroup('${ticket.id}')"><div style="font-weight:700;">${ticket.client}</div></td>
+      <td class="sc-tech" style="cursor:pointer;" onclick="toggleGroup('${ticket.id}')">${technicianSummary}</td>
+      <td class="sc-range" colspan="2" style="color:var(--muted);cursor:pointer;" onclick="toggleGroup('${ticket.id}')">${range}</td>
+      <td class="sc-dur" style="cursor:pointer;" onclick="toggleGroup('${ticket.id}')">—</td>
+      <td class="sc-status" style="cursor:pointer;" onclick="toggleGroup('${ticket.id}')"><span class="badge badge-progress">${doneCount}/${days.length} completed</span></td>
+      <td class="sc-actions" style="white-space:nowrap;">${reportLinkHtml(ticket)}</td>
+    </tr>
+  `;
+}
+
+async function render() {
+  // Fasa 6 audit (3 Okt) — same "stuck Loading…" bug class already fixed in
+  // checklist.html: already retries below (see setInterval), but a failed
+  // call was an uncaught rejection with no message — now it shows a clear
+  // message on failure instead of hanging silently; the retry still self-heals.
+  let tickets;
+  try {
+    ({ tickets } = await api("/api/tickets"));
+  } catch (e) {
+    document.getElementById("list").innerHTML = `<div class="empty">Couldn't load checklists — ${e.message || "retrying…"}</div>`;
+    return;
+  }
+  const q = document.getElementById("checklistSearch").value.trim().toLowerCase();
+
+  const groups = [];
+  tickets.forEach(t => {
+    let days = (t.visit_days || []).slice();
+
+    if (_statusFilter !== "all") days = days.filter(day => dayStatusKey(day) === _statusFilter);
+
+    if (q) {
+      days = days.filter(day =>
+        t.client.toLowerCase().includes(q) ||
+        t.id.toLowerCase().includes(q) ||
+        (day.technicians || []).some(name => name.toLowerCase().includes(q)) ||
+        (day.engineer || "").toLowerCase().includes(q)
+      );
+    }
+
+    days.sort((a, b) => b.date.localeCompare(a.date));
+    if (days.length) groups.push({ ticket: t, days });
+  });
+
+  groups.sort((a, b) => _sortDir === "asc"
+    ? a.days[0].date.localeCompare(b.days[0].date)
+    : b.days[0].date.localeCompare(a.days[0].date));
+
+  const list = document.getElementById("list");
+  if (groups.length === 0) { list.innerHTML = emptyState("No visit days match.", "shield"); return; }
+
+  const rows = groups.map(({ ticket, days }) => {
+    if (days.length <= GROUP_COLLAPSE_THRESHOLD) {
+      // Standalone or short (1-2 day) job — no summary row, so each row
+      // carries its own report link.
+      return days.map((day, i) => checklistRowHtml(ticket, day, i > 0, true)).join("");
+    }
+    const expanded = !!_expandedGroups[ticket.id];
+    const summary = groupSummaryRowHtml(ticket, days, expanded);
+    const detail = expanded ? days.map(day => checklistRowHtml(ticket, day, true, false)).join("") : "";
+    return summary + detail;
+  }).join("");
+
+  // Phone-only sort button: on a phone the table turns into one card per
+  // checklist (style.css, .checklists-table-cards) and the "Start Time"
+  // header that carries the sort arrow is hidden, so this takes over.
+  // Hidden on a computer; same toggleChecklistSort().
+  list.innerHTML = `
+    <div class="tickets-sort-mobile"><span>Sort by</span>
+      <button type="button" class="secondary active" onclick="toggleChecklistSort()">Start time ${_sortDir === "asc" ? "&#8593;" : "&#8595;"}</button>
+    </div>
+    <table class="tickets-table checklists-table-cards">
+      <thead><tr>
+        <th>Checklist ID</th>
+        <th>Client / Site</th>
+        <th>Technician</th>
+        <th style="cursor:pointer;user-select:none;" onclick="toggleChecklistSort()">Start Time ${_sortDir === "asc" ? "&#8593;" : "&#8595;"}</th>
+        <th>Submit Time</th>
+        <th>Duration</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+render();
+setInterval(() => {
+  const active = document.activeElement;
+  if (active && active.id === "checklistSearch") return;
+  render();
+}, 4000);
+</script>
+</body>
+</html>

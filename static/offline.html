@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title>Offline — ERS O&amp;M</title>
+<!-- Served by sw.js when a page can't be loaded. Styles are inline on
+     purpose so this page never depends on anything else being cached. -->
+<style>
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #f6f7f9; color: #1a1d23;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  .offline-card {
+    max-width: 340px; margin: 20px; padding: 32px 24px; text-align: center;
+    background: #ffffff; border: 1px solid #e7e9ee; border-radius: 16px;
+  }
+  .offline-card img { width: 72px; height: 72px; border-radius: 16px; margin-bottom: 12px; }
+  .offline-card h1 { font-size: 20px; margin: 0 0 8px; }
+  .offline-card p { color: #8b93a1; font-size: 15px; line-height: 1.5; margin: 0 0 22px; }
+  .offline-card button {
+    width: 100%; padding: 14px; border: none; border-radius: 12px;
+    background: #f2760c; color: #ffffff; font-size: 16px; font-weight: 700;
+  }
+  .offline-card button:active { background: #d9640a; }
+</style>
+</head>
+<body>
+  <div class="offline-card">
+    <img src="icons/icon-192.png" alt="">
+    <h1>You're offline</h1>
+    <p>ERS O&amp;M needs an internet connection to load your jobs. Check your mobile data or Wi-Fi, then try again.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </div>
+<script>
+  // Come back on our own as soon as the connection returns.
+  window.addEventListener("online", () => location.reload());
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{"ts": "2026-10-26T10:01:19+00:00", "actor": "HOD - Steve", "action": "mark_ticket_read", "ticket_id": "TCK-0044", "result": "success"}
+{"ts": "2026-10-26T10:01:29+00:00", "actor": "HOD - Steve", "action": "mark_ticket_read", "ticket_id": "TCK-0109", "result": "success"}
+{"ts": "2026-10-26T10:03:14+00:00", "actor": "HOD - Steve", "action": "mark_ticket_read", "ticket_id": "TCK-0110", "result": "success"}
+{"ts": "2026-10-26T10:04:37+00:00", "actor": "HOD - Steve", "action": "link_events", "ticket_id": "TCK-0110", "result": "success"}
+{"ts": "2026-10-26T10:05:18+00:00", "actor": "Technician - Chong", "action": "reschedule", "ticket_id": "TCK-0110", "result": "success"}

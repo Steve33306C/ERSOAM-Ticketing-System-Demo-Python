@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tickets — Admin — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("admin");
+renderShell({
+  active: "tickets", role: "admin", session,
+  pageTitle: "Tickets", pageSubtitle: "All open tickets, department-wide. Assignment only affects your Dashboard.",
+});
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;width:auto;margin:0;">
+        <input type="checkbox" id="showClosed" style="width:auto;margin:0;"> Show closed tickets
+      </label>
+      <button onclick="location.href='ticket-new.html'">+ New Ticket</button>
+    </div>
+    <input id="ticketSearch" type="text" placeholder="Search tickets by number, client, or title…" style="margin-top:10px;">
+    <div id="list"></div>
+  </div>
+`;
+document.getElementById("showClosed").addEventListener("change", render);
+document.getElementById("ticketSearch").addEventListener("input", render);
+
+// Skeleton placeholder while the first render() is still waiting on the
+// API — render() below overwrites #list with the real table exactly as
+// before.
+document.getElementById("list").innerHTML = skeletonRows(3);
+
+async function render() {
+  try {
+    const { tickets } = await api("/api/tickets");
+    const showClosed = document.getElementById("showClosed").checked;
+    const q = document.getElementById("ticketSearch").value;
+    const shown = filterTicketsBySearch(tickets.filter(t => showClosed || t.state !== "closed"), q);
+    const list = document.getElementById("list");
+    list.innerHTML = ticketTableHtml(shown);
+  } catch (e) {
+    document.getElementById("list").innerHTML = `<div class="empty">Couldn't load tickets — ${e.message || "retrying…"}</div>`;
+  }
+}
+render();
+setInterval(() => {
+  const active = document.activeElement;
+  if (active && active.id === "ticketSearch") return; // jangan re-render sambil user tengah taip
+  render();
+}, 4000);
+</script>
+</body>
+</html>

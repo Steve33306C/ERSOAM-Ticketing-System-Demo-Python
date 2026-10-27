@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Client — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole(["admin", "engineer", "cs"]);
+renderShell({
+  active: "clients", role: session.role, session,
+  pageTitle: "Clients & Sites", pageSubtitle: "General details, sites, ticket history, and reports for this client.",
+});
+
+const clientId = getQueryParam("id");
+document.getElementById("pageContent").innerHTML = `
+  <a class="back-link" href="clients.html">&larr; Back</a>
+  <div id="detailRoot">${skeletonCards(2)}</div>
+`;
+
+function sitesTable(c) {
+  if (!c.sites.length) {
+    return `<table class="data-table"><thead><tr><th>Site Name</th><th>Capacity</th><th>Panels</th><th>Inverters</th><th>Actions</th></tr></thead>
+      <tbody><tr><td colspan="5" class="empty">No sites registered for this client.</td></tr></tbody></table>`;
+  }
+  return `<table class="data-table"><thead><tr><th>Site Name</th><th>Capacity</th><th>Panels</th><th>Inverters</th><th>Actions</th></tr></thead>
+    <tbody>${c.sites.map(s => `<tr><td>${s.name}</td><td>${s.capacity}</td><td>${s.panels}</td><td>${s.inverters}</td><td class="small">—</td></tr>`).join("")}</tbody></table>`;
+}
+
+function ticketsTable(tickets) {
+  if (!tickets.length) {
+    return `<table class="data-table"><thead><tr><th>Ticket #</th><th>Title</th><th>Status</th><th>Created At</th><th>Actions</th></tr></thead>
+      <tbody><tr><td colspan="5" class="empty">No tickets found for this client.</td></tr></tbody></table>`;
+  }
+  return `<table class="data-table"><thead><tr><th>Ticket #</th><th>Title</th><th>Status</th><th>Created At</th><th>Actions</th></tr></thead>
+    <tbody>${tickets.map(t => `<tr>
+      <td>${t.id}</td><td>${t.title}</td>
+      <td><span class="${badgeClass(t)}">${simpleStatus(t)}</span></td>
+      <td>${fmtTime(t.created_at)}</td>
+      <td><a href="ticket-detail.html?id=${t.id}">View</a></td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
+function reportsTable(tickets) {
+  const withReports = ticketsWithReports(tickets);
+  if (!withReports.length) {
+    return `<table class="data-table"><thead><tr><th>Report #</th><th>Type</th><th>Status</th><th>Created At</th><th>Actions</th></tr></thead>
+      <tbody><tr><td colspan="5" class="empty">No reports found for this client.</td></tr></tbody></table>`;
+  }
+  return `<table class="data-table"><thead><tr><th>Report #</th><th>Type</th><th>Status</th><th>Created At</th><th>Actions</th></tr></thead>
+    <tbody>${withReports.map(t => `<tr>
+      <td>RPT-${t.id}</td><td>${TYPE_LABELS[t.type] || t.type}</td><td>${reportStatusLabel(t)}</td><td>${fmtTime(t.created_at)}</td>
+      <td><a href="ticket-detail.html?id=${t.id}">View</a></td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
+function detailShell(c, tickets) {
+  const addressLine = [c.address, c.city, c.state, c.postcode].filter(Boolean).join(", ") || "No address on file";
+  return `
+    <div class="card">
+      <div class="client-header">
+        <div>
+          <h2>${c.name} ${clientTypeBadge(c)}</h2>
+          <div class="meta-line">&#128205; ${addressLine}</div>
+          ${c.phone ? `<div class="meta-line">&#128222; ${c.phone}</div>` : ""}
+          ${c.email ? `<div class="meta-line">&#9993; ${c.email}</div>` : ""}
+          ${c.contact_person ? `<div class="meta-line">Contact: ${c.contact_person}</div>` : ""}
+        </div>
+        <div>
+          <button class="secondary" disabled title="Not built in this pass">Edit Info</button>
+          <button class="danger" disabled title="Not built in this pass">Delete Client</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2>Sites &amp; Installations</h2>
+        <button class="secondary" disabled title="Not built in this pass">+ Add Site</button>
+      </div>
+      ${sitesTable(c)}
+    </div>
+
+    <div class="card">
+      <h2>Ticket History</h2>
+      ${ticketsTable(tickets)}
+    </div>
+
+    <div class="card">
+      <h2>Reports History</h2>
+      <p class="small">Reports live inside their ticket — there's no separate report record. "View" opens the
+      ticket's Report card directly.</p>
+      ${reportsTable(tickets)}
+    </div>
+  `;
+}
+
+async function render() {
+  if (!clientId) {
+    document.getElementById("detailRoot").innerHTML = `<div class="card"><div class="empty">No client specified.</div></div>`;
+    return;
+  }
+  let c;
+  try {
+    c = await api(`/api/clients/${clientId}`);
+  } catch (e) {
+    document.getElementById("detailRoot").innerHTML = `<div class="card"><div class="empty">Client not found.</div></div>`;
+    return;
+  }
+  const { tickets } = await api("/api/tickets");
+  const clientTickets = ticketsForClient(tickets, c);
+  document.getElementById("detailRoot").innerHTML = detailShell(c, clientTickets);
+}
+render();
+setInterval(render, 5000);
+</script>
+</body>
+</html>

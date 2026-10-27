@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendar — ERS O&amp;M</title>
+<link rel="stylesheet" href="style.css">
+<!-- PWA: installable technician app (13 Okt) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ERS O&amp;M">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+const session = requireRole("technician");
+renderMobileShell({ pageTitle: "Calendar", session });
+
+let view = "month";
+let cursorDate = todayYmd();
+let selectedDate = todayYmd();
+let allEvents = [];
+let allTickets = [];
+
+document.getElementById("pageContent").innerHTML = `
+  <div class="cal-toolbar">
+    <div class="cal-toolbar-left">
+      <button class="secondary" onclick="navToday()">Today</button>
+      <button class="secondary" onclick="navPrev()">&larr;</button>
+      <button class="secondary" onclick="navNext()">&rarr;</button>
+    </div>
+    <div class="tabs" style="margin:0;">
+      <button class="tab" data-view="month" onclick="setView('month')">Month</button>
+      <button class="tab" data-view="week" onclick="setView('week')">Week</button>
+    </div>
+  </div>
+  <h3 id="calLabel" style="margin:6px 4px 10px;"></h3>
+  <div id="calGrid"><div class="empty">Loading…</div></div>
+  <div class="divider"></div>
+  <h3 id="dayListLabel" style="margin:0 4px 10px;"></h3>
+  <div id="dayList"></div>
+`;
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  renderGrid();
+}
+function navToday() { cursorDate = todayYmd(); renderGrid(); }
+function navPrev() {
+  if (view === "month") {
+    const { y, m } = parseYmd(cursorDate);
+    cursorDate = ymd(m === 1 ? y - 1 : y, m === 1 ? 12 : m - 1, 1);
+  } else {
+    cursorDate = addDaysStr(cursorDate, -7);
+  }
+  renderGrid();
+}
+function navNext() {
+  if (view === "month") {
+    const { y, m } = parseYmd(cursorDate);
+    cursorDate = ymd(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, 1);
+  } else {
+    cursorDate = addDaysStr(cursorDate, 7);
+  }
+  renderGrid();
+}
+
+function renderGrid() {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === view));
+  const { y, m } = parseYmd(cursorDate);
+  if (view === "month") {
+    document.getElementById("calLabel").textContent = `${MONTH_NAMES[m - 1]} ${y}`;
+    document.getElementById("calGrid").innerHTML = renderMonthGrid(y, m, allEvents, "selectDay");
+  } else {
+    const weekStart = startOfWeekStr(cursorDate);
+    const weekEnd = addDaysStr(weekStart, 6);
+    const a = parseYmd(weekStart), b = parseYmd(weekEnd);
+    document.getElementById("calLabel").textContent = a.m === b.m
+      ? `${MONTH_NAMES[a.m - 1]} ${a.d}–${b.d}, ${a.y}`
+      : `${MONTH_NAMES[a.m - 1]} ${a.d} – ${MONTH_NAMES[b.m - 1]} ${b.d}, ${b.y}`;
+    document.getElementById("calGrid").innerHTML = renderWeekGrid(weekStart, allEvents, "selectDay");
+    const wrap = document.querySelector(".cal-hourgrid-wrap");
+    if (wrap) wrap.scrollTop = 7 * 36;
+  }
+}
+
+function selectDay(dateStr) {
+  selectedDate = dateStr;
+  renderDayList();
+}
+
+function renderDayList() {
+  const label = selectedDate === todayYmd() ? "Today" : selectedDate;
+  document.getElementById("dayListLabel").textContent = `Events on ${label}`;
+  const events = allEvents.filter(e => e.date <= selectedDate && e.end_date >= selectedDate);
+  document.getElementById("dayList").innerHTML = events.length
+    ? events.map(e => {
+        const ticket = e.linked_ticket_id ? allTickets.find(t => t.id === e.linked_ticket_id) : null;
+        const timeLabel = e.all_day ? "All-day" : (e.time || "Time TBC") + (e.end_time && e.end_time !== e.time ? `\u2013${e.end_time}` : "");
+        return `<div class="job-card" ${ticket ? `onclick="location.href='job-detail.html?id=${ticket.id}'"` : ""} style="${ticket ? "" : "opacity:0.75;"}">
+          <div class="job-card-time">${timeLabel}</div>
+          <div class="job-card-title">${e.title}</div>
+          <div class="list-card-meta">${ticket ? (TYPE_LABELS[ticket.type] || ticket.type) : "Not linked to a job yet"}</div>
+        </div>`;
+      }).join("")
+    : emptyState("No events on this day.", "calendar", "font-size:15px;padding:30px 0;");
+}
+
+async function loadAndRender() {
+  // Fasa 6 audit (3 Okt) — same "stuck Loading…" bug class already fixed in
+  // checklist.html: this file had no try/catch AND no retry at all, so a
+  // single failed API call left the grid on "Loading…" forever with no way
+  // to recover. Now: on failure, show a clear message instead of leaving the
+  // skeleton up, and retry automatically every 8s (same interval calendar.html
+  // uses) so a transient blip self-heals without the technician doing anything.
+  let evRes, tkRes, acRes;
+  try {
+    [evRes, tkRes, acRes] = await Promise.all([api("/api/calendar_events"), api("/api/tickets"), api("/api/accounts")]);
+  } catch (e) {
+    document.getElementById("calGrid").innerHTML = `<div class="empty">Couldn't load the calendar — ${e.message || "retrying…"}</div>`;
+    return;
+  }
+  const accountsByName = Object.fromEntries(acRes.accounts.map(a => [a.name, a]));
+  allTickets = tkRes.tickets;
+  allEvents = evRes.calendar_events.filter(e => {
+    if (!e.linked_ticket_id) return true;
+    const ticket = allTickets.find(t => t.id === e.linked_ticket_id);
+    return ticket ? isMyTeamTicket(ticket, session, accountsByName) : true;
+  });
+  renderGrid();
+  renderDayList();
+}
+loadAndRender();
+setInterval(loadAndRender, 8000);
+</script>
+</body>
+</html>
