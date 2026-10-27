@@ -36,4 +36,4 @@ The server creates a `backups/` folder by itself (one copy of `db.json` per day,
 
 ## Not built yet (short list)
 
-Real login, real email and push notifications, real photo and file storage, a real database, and four of the six planned report formats. The Read Me First PDF has the full list."# ERSOAM-Ticketing-System-Demo" 
+Real login, real email and push notifications, real photo and file storage, a real database, and four of the six planned report formats. The Read Me First PDF has the full list.
