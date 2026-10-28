@@ -5,3 +5,7 @@
 - [ ] Show available ticket (Method to enable personnel to contribute to ticket that are not assigned to them)
 - [ ] Analytic show extra contribution for unassigned ticket
 - [ ] Bug: Ticket panel showing just assigned ticket instead of all opened tickets
+- [ ] Share ticket to Whatsapp
+- [ ] Notification for 4 different Events
+- [ ] How to show notification without login
+- [ ] Ticket "New Message" marker
