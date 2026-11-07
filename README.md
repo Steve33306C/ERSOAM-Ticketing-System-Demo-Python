@@ -34,6 +34,18 @@ Open http://localhost:8000/ and pick an account. There is no password in this de
 
 The server creates a `backups/` folder by itself (one copy of `db.json` per day, newest 14 kept) and writes two log files. These are not part of the handover.
 
+## Fresh demo data (dates relative to today)
+
+`db.json` is not stored in git. Create it (or reset it any time, with the server stopped) with:
+
+```
+python3 tools/reset_demo.py
+```
+
+It shifts every date in `tools/seed/db.seed.json` to match today (Malaysia time) and adds test tickets: a visit today, in 2 and 3 days, a 3-day visit, an unscheduled ticket and free calendar events. Your previous file is kept as `db.before-reset.json`.
+
+Full instructions and the shared-repo rules for developers: [docs/DEV-GUIDE.md](docs/DEV-GUIDE.md).
+
 ## Not built yet (short list)
 
 Real login, real email and push notifications, real photo and file storage, a real database, and four of the six planned report formats. The Read Me First PDF has the full list.

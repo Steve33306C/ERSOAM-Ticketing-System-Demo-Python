@@ -1,5 +1,5 @@
 {
-  "_seq": 110,
+  "_seq": 109,
   "settings": {
     "stale_minutes": 4320
   },
@@ -55,508 +55,6 @@
     }
   ],
   "tickets": [
-    {
-      "id": "TCK-0110",
-      "title": "TestClient#1 - Residential Servicing",
-      "client": "TestClient#1",
-      "site": "",
-      "type": "residential_servicing",
-      "priority": "medium",
-      "description": "xcfvb",
-      "state": "scheduled",
-      "assignees": [
-        "HOD - Steve",
-        "Engineer - Faisal",
-        "CS - Alice",
-        "Engineer - Wardah"
-      ],
-      "engineer_date": "2026-10-28",
-      "visit_days": [
-        {
-          "id": 1,
-          "date": "2026-10-28",
-          "source_event_id": "EVT-0105",
-          "engineer": "Engineer - Wardah",
-          "technicians": [
-            "Technician - Chong",
-            "Technician - Devi"
-          ],
-          "checklist": {
-            "template": "residential",
-            "checklist_started_at": null,
-            "checklist_completed_at": null,
-            "submitted_by": null,
-            "general_remarks": "",
-            "general_media": [],
-            "pdf_file": null,
-            "items": [
-              {
-                "id": "item-1",
-                "stage": "pre",
-                "section": "Personal Protective Equipment (PPE)",
-                "text": "All **PPE** (helmet, vest, boots, gloves) worn and in good condition.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-2",
-                "stage": "pre",
-                "section": "Working at Height & Fall Protection",
-                "text": "**Full body harness**, lanyard, and anchor points inspected and used.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-3",
-                "stage": "pre",
-                "section": "Working at Height & Fall Protection",
-                "text": "**Ladder inspected**, set at a 4:1 angle, secured, and extends 1m above the roof.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-4",
-                "stage": "pre",
-                "section": "Site & Roof Structure Assessment",
-                "text": "Inspect roof for **cracks, damage, moss, or sagging** before stepping.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-5",
-                "stage": "pre",
-                "section": "Site & Roof Structure Assessment",
-                "text": "Check weather: ensure **no rain, wet roof, strong wind (>20km/h), or lightning**.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-6",
-                "stage": "during",
-                "section": "Electrical Isolation & LOTO",
-                "text": "**Switch OFF** AC and DC isolators and apply **LOTO** before electrical work.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-7",
-                "stage": "during",
-                "section": "Electrical Isolation & LOTO",
-                "text": "Verify **zero voltage** using a calibrated multimeter / voltage detector.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-8",
-                "stage": "during",
-                "section": "Inverter & Isolator Area",
-                "text": "Inverter and DC isolator location has **sufficient space** for heat release and **no flammable items** nearby.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-9",
-                "stage": "during",
-                "section": "Inverter & Isolator Area",
-                "text": "Inverter casing, seals, and cable entries are **intact and sealed** against moisture and pests.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-10",
-                "stage": "during",
-                "section": "DC Strings & Module Integrity",
-                "text": "Check **open-circuit voltage (Voc)** and string polarity against design specs.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-11",
-                "stage": "during",
-                "section": "DC Strings & Module Integrity",
-                "text": "Inspect **MC4 connectors**: properly crimped, fully locked, undamaged, and matching brands.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-12",
-                "stage": "during",
-                "section": "Grounding & Earthing Safety",
-                "text": "Ensure PV frames, mounting rails, and inverter casing are **properly grounded**.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-13",
-                "stage": "during",
-                "section": "Grounding & Earthing Safety",
-                "text": "Verify **earth pit resistance** is below safe limits (< 10 Ohms).",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-14",
-                "stage": "during",
-                "section": "Cable Routing & Mechanical Protection",
-                "text": "DC/AC cables properly protected in **trunking or conduits** with no sharp edges.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-15",
-                "stage": "during",
-                "section": "AC Distribution Board (DB) Safety",
-                "text": "Main switchboard/DB connections secure; **RCBO/RCD and AC breakers** operational and labeled.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-16",
-                "stage": "during",
-                "section": "AC Distribution Board (DB) Safety",
-                "text": "AC and DC **Surge Protection Devices (SPD)** checked; indicators are green.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-17",
-                "stage": "during",
-                "section": "Fire Safety & Emergency Preparedness",
-                "text": "**Fire extinguisher** available on site and within validity date.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-18",
-                "stage": "during",
-                "section": "Fire Safety & Emergency Preparedness",
-                "text": "**First aid kit** accessible and emergency contacts briefed.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-19",
-                "stage": "post",
-                "section": "Housekeeping & Public Safety",
-                "text": "Place **safety cones and warning signs** around the ladder base and roof perimeter.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              },
-              {
-                "id": "item-20",
-                "stage": "post",
-                "section": "Site Demobilization & Handover",
-                "text": "**Clear tools and scrap** from roof, and brief client on operation and shutdown.",
-                "status": null,
-                "note": "",
-                "attachments": []
-              }
-            ]
-          },
-          "status": "pending"
-        }
-      ],
-      "calendar_event_ids": [
-        "EVT-0105"
-      ],
-      "default_engineer": "Engineer - Wardah",
-      "report": {
-        "id": "RPT-20261026-0111",
-        "format": "residential",
-        "status": "draft",
-        "submitted_by": "",
-        "submitted_at": null,
-        "approved_by": "",
-        "approved_at": null,
-        "report_rejections": [],
-        "general": {
-          "date_of_inspection": "",
-          "system_owner": "TestClient#1",
-          "system_location": "",
-          "contact_no": "",
-          "system_size_kwp": "",
-          "inverter_model": "",
-          "inverter_sn": ""
-        },
-        "maintenance_checklist": [
-          {
-            "id": "chk-1",
-            "category": "PV Module & Structure",
-            "name": "Visual inspection",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-2",
-            "category": "PV Module & Structure",
-            "name": "Structure visual inspection",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-3",
-            "category": "PV Module & Structure",
-            "name": "Cleaning",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-4",
-            "category": "PV Inverter",
-            "name": "Visual inspection",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-5",
-            "category": "PV Inverter",
-            "name": "Grounding",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-6",
-            "category": "PV Inverter",
-            "name": "Download inverter log",
-            "extra_label": "Data Period",
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-7",
-            "category": "PV Inverter",
-            "name": "Firmware check and update",
-            "extra_label": "Ver.",
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-8",
-            "category": "PV Inverter",
-            "name": "Cleaning",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-9",
-            "category": "AJB, Trunking, Earth Chamber",
-            "name": "Visual inspection",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-10",
-            "category": "AJB, Trunking, Earth Chamber",
-            "name": "Grounding/earthing check",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-11",
-            "category": "AJB, Trunking, Earth Chamber",
-            "name": "Connection check and tightening",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-12",
-            "category": "AJB, Trunking, Earth Chamber",
-            "name": "AJB cleaning",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-13",
-            "category": "PV Meter",
-            "name": "Visual Inspection",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-14",
-            "category": "PV Meter",
-            "name": "Grounding (if necessary)",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-15",
-            "category": "PV Meter",
-            "name": "Connection check and tightening",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          },
-          {
-            "id": "chk-16",
-            "category": "PV Meter",
-            "name": "Exported energy reading",
-            "extra_label": null,
-            "result": null,
-            "remarks": "",
-            "extra": ""
-          }
-        ],
-        "electrical": {
-          "ac_phase_type": "",
-          "ac_measurements": {
-            "single": {
-              "line_to_neutral_v": "",
-              "line_to_ground_v": "",
-              "neutral_to_ground_v": ""
-            },
-            "three": {
-              "l1_l2_v": "",
-              "l2_l3_v": "",
-              "l3_l1_v": "",
-              "l1_n_v": "",
-              "l2_n_v": "",
-              "l3_n_v": "",
-              "l1_g_v": "",
-              "l2_g_v": "",
-              "l3_g_v": "",
-              "n_g_v": ""
-            }
-          },
-          "inverters": []
-        },
-        "media": {
-          "pv_before": [],
-          "pv_after": [],
-          "inverter": [],
-          "ac_photo": [],
-          "dc_photo": [],
-          "fit_meter": []
-        },
-        "summary": {
-          "psh": "",
-          "overall_status": "",
-          "yearly_generation_kwh": "",
-          "avg_monthly_generation_kwh": "",
-          "engineer_comments": "",
-          "performance_graph": []
-        },
-        "report_notes": {
-          "performance_report_result": null,
-          "remarks": "",
-          "additional_notes": ""
-        },
-        "installation_improvement": {
-          "site_improvement_performed": null,
-          "engineer_comments": ""
-        },
-        "additional_media": [],
-        "created_at": "2026-10-26T10:03:13+00:00",
-        "updated_at": "2026-10-26T10:03:13+00:00"
-      },
-      "closure": {
-        "type": null,
-        "reason": null,
-        "closed_at": null
-      },
-      "snooze_until": null,
-      "snooze_reason": "",
-      "snoozed_at": null,
-      "messages": [],
-      "equipment": {
-        "panels": "",
-        "inverter_brand": "",
-        "inverter_model": "",
-        "nemcd_ref": ""
-      },
-      "commercial": {
-        "dlp_end_date": "",
-        "chargeable_service_call": false
-      },
-      "additional": {
-        "so_number": "",
-        "premium_care_status": "",
-        "system_size": "",
-        "assigned_team": "",
-        "contact_phone": "",
-        "client_remarks": ""
-      },
-      "created_at": "2026-10-26T10:03:13+00:00",
-      "updated_at": "2026-10-26T10:05:17+00:00",
-      "event_log": [
-        {
-          "ts": "2026-10-26T10:03:13+00:00",
-          "actor": "HOD - Steve",
-          "action": "create",
-          "from": null,
-          "to": "created",
-          "note": ""
-        },
-        {
-          "ts": "2026-10-26T10:04:37+00:00",
-          "actor": "HOD - Steve",
-          "action": "link_events",
-          "from": "created",
-          "to": "scheduled",
-          "note": "engineer=Engineer - Wardah, technicians=Technician - Chong,Technician - Devi, days_added=2026-10-28"
-        },
-        {
-          "ts": "2026-10-26T10:05:17+00:00",
-          "actor": "Technician - Chong",
-          "action": "reschedule_request",
-          "from": "scheduled",
-          "to": "scheduled",
-          "note": "Client requested a date change"
-        }
-      ],
-      "mention_reads": {
-        "HOD - Steve": 0
-      },
-      "reschedule_requested": true,
-      "reschedule_reason": "Client requested a date change",
-      "reschedule_requested_at": "2026-10-26T10:05:17+00:00"
-    },
     {
       "id": "TCK-0109",
       "title": "Wong Kah Weng - DERE",
@@ -1320,8 +818,7 @@
       ],
       "mention_reads": {
         "CS - Alice": 0,
-        "Engineer - Wardah": 1,
-        "HOD - Steve": 1
+        "Engineer - Wardah": 1
       }
     },
     {
@@ -30164,7 +29661,7 @@
               }
             ]
           },
-          "status": "unfinished"
+          "status": "pending"
         }
       ],
       "calendar_event_ids": [
@@ -30199,7 +29696,7 @@
       "snoozed_at": null,
       "messages": [],
       "created_at": "2026-09-06T17:02:14+00:00",
-      "updated_at": "2026-10-26T09:59:29+00:00",
+      "updated_at": "2026-10-14T07:35:58+00:00",
       "event_log": [
         {
           "ts": "2026-09-06T17:02:14+00:00",
@@ -30240,14 +29737,6 @@
           "from": "scheduled",
           "to": "closed",
           "note": "trea"
-        },
-        {
-          "ts": "2026-10-26T09:59:29+00:00",
-          "actor": "system",
-          "action": "day_unfinished",
-          "from": "closed",
-          "to": "closed",
-          "note": "day 2026-10-14 passed without a submitted checklist"
         }
       ],
       "report": {
@@ -30468,8 +29957,7 @@
       },
       "mention_reads": {
         "CS - Alice": 0,
-        "Engineer - Faisal": 0,
-        "HOD - Steve": 0
+        "Engineer - Faisal": 0
       }
     },
     {
@@ -59598,19 +59086,9 @@
       "end_time": "",
       "linked_ticket_id": "TCK-0109",
       "created_at": "2026-10-14T08:16:12+00:00"
-    },
-    {
-      "id": "EVT-0105",
-      "title": "Test",
-      "date": "2026-10-28",
-      "end_date": "2026-10-28",
-      "all_day": true,
-      "time": "",
-      "end_time": "",
-      "linked_ticket_id": "TCK-0110",
-      "created_at": "2026-10-26T10:03:34+00:00"
     }
   ],
-  "_calendar_seq": 105,
-  "_report_seq": 111
+  "_calendar_seq": 104,
+  "_report_seq": 110,
+  "_seed_ref_date": "2026-10-26"
 }

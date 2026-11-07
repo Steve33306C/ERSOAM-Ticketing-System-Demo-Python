@@ -1,0 +1,17 @@
+# Live demo data - rebuild it with: python3 tools/reset_demo.py
+db.json
+db.json.tmp
+db.before-reset.json
+backups/
+
+# Logs the server writes while you test
+om_actions.log
+om_email_outbox.log
+
+# Python / editor / OS noise
+__pycache__/
+*.pyc
+*.swp
+.vscode/
+.DS_Store
+Thumbs.db
