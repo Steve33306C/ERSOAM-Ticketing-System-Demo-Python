@@ -2450,7 +2450,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def ensure_db():
     if not os.path.exists(DB_PATH):
-        raise SystemExit("db.json not found — run this from the om-ticket-demo folder.")
+        raise SystemExit("db.json not found — run this from the project folder. To create a fresh demo database run: python3 tools/reset_demo.py")
 
 
 if __name__ == "__main__":
